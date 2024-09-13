@@ -1,0 +1,7 @@
+.env
+.github/
+__pycache__/
+configs/config.json
+.venv/
+data/
+venv/
