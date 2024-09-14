@@ -19,6 +19,74 @@ class MusicStatsCog(commands.Cog, name="MusicStatsCog", description="Displays mu
         self.bot = bot
         log_debug(bot, "MusicStatsCog initialized.")
     
+    @commands.hybrid_command(name="topsong", help="Show the most requested song.")
+    async def most_requested(self, ctx):
+        """Show the most requested song."""
+        conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT song_title, song_url, COUNT(*) AS count 
+            FROM user_requests 
+            GROUP BY song_title, song_url 
+            ORDER BY count DESC 
+            LIMIT 1
+        ''')
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            song_title, song_url, count = result
+            await ctx.send(f"The most requested song is [{song_title}]({song_url}) with **{count}** requests.")
+        else:
+            await ctx.send("No data available.")
+
+    @commands.hybrid_command(name="topslowsong", help="Show the most requested slow song.")
+    async def most_requested_slow(self, ctx):
+        """Show the most requested slow song (<= 0.9x speed)."""
+        conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT song_title, song_url, COUNT(*) AS count 
+            FROM user_requests 
+            WHERE playback_speed <= 0.9
+            GROUP BY song_title, song_url 
+            ORDER BY count DESC 
+            LIMIT 1
+        ''')
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            song_title, song_url, count = result
+            await ctx.send(f"The most requested slow song (<= 0.9x speed) is [{song_title}]({song_url}) with **{count}** requests.")
+        else:
+            await ctx.send("No data available for slow songs.")
+
+    @commands.hybrid_command(name="topfastsong", help="Show the most requested fast song.")
+    async def most_requested_fast(self, ctx):
+        """Show the most requested fast song (>= 1.1x speed)."""
+        conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT song_title, song_url, COUNT(*) AS count 
+            FROM user_requests 
+            WHERE playback_speed >= 1.1
+            GROUP BY song_title, song_url 
+            ORDER BY count DESC 
+            LIMIT 1
+        ''')
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            song_title, song_url, count = result
+            await ctx.send(f"The most requested fast song (>= 1.1x speed) is [{song_title}]({song_url}) with **{count}** requests.")
+        else:
+            await ctx.send("No data available for fast songs.")
+
     @commands.hybrid_command(name="topliked", help="Show the most liked song.")
     async def most_liked(self, ctx):
         """Show the most liked song."""
@@ -530,6 +598,112 @@ class MusicStatsCog(commands.Cog, name="MusicStatsCog", description="Displays mu
                 plt.clf()
             else:
                 await ctx.send("No data available for playback speed distribution.")
+
+        except Exception as e:
+            await ctx.send(f"An error occurred: {str(e)}")
+
+    @commands.hybrid_command(name="slowsongchart", help="Show a donut chart for the top 5 slow songs.")
+    async def most_slow_songs_chart(self, ctx):
+        """Generate and display a donut chart of the top 5 slow songs (<= 0.9x speed)."""
+        try:
+            conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+            cursor = conn.cursor()
+
+            # Fetch the top 5 slow songs (<= 0.9x speed)
+            cursor.execute('''
+                SELECT song_title, COUNT(*) AS count 
+                FROM user_requests 
+                WHERE playback_speed <= 0.9
+                GROUP BY song_title
+                ORDER BY count DESC 
+                LIMIT 5
+            ''')
+            slow_data = cursor.fetchall()
+            conn.close()
+
+            if slow_data:
+                # Prepare slow songs data for chart
+                slow_songs = [row[0] for row in slow_data]
+                slow_counts = [row[1] for row in slow_data]
+
+                # Create donut chart for slow songs
+                fig, ax = plt.subplots(figsize=(6, 4))
+
+                wedges, texts, autotexts = ax.pie(slow_counts, labels=None, autopct='%1.1f%%',
+                                                startangle=90, wedgeprops=dict(width=0.3))
+                ax.set_title("Top 5 Slow Songs (<= 0.9x)", fontsize=14)
+
+                center_circle = plt.Circle((0, 0), 0.70, fc='white')
+                fig.gca().add_artist(center_circle)
+
+                ax.legend(wedges, slow_songs, title="Slow Songs", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+
+                # Save the chart to a buffer
+                buf = BytesIO()
+                plt.savefig(buf, format='png', bbox_inches='tight')
+                buf.seek(0)
+
+                file = discord.File(fp=buf, filename="top5_slow_songs.png")
+                await ctx.send(file=file)
+
+                # Close the buffer and clear the plot
+                buf.close()
+                plt.clf()
+            else:
+                await ctx.send("No data available for slow songs.")
+
+        except Exception as e:
+            await ctx.send(f"An error occurred: {str(e)}")
+
+    @commands.hybrid_command(name="fastsongchart", help="Show a donut chart for the top 5 fast songs.")
+    async def most_fast_songs_chart(self, ctx):
+        """Generate and display a donut chart of the top 5 fast songs (>= 1.1x speed)."""
+        try:
+            conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+            cursor = conn.cursor()
+
+            # Fetch the top 5 fast songs (>= 1.1x speed)
+            cursor.execute('''
+                SELECT song_title, COUNT(*) AS count 
+                FROM user_requests 
+                WHERE playback_speed >= 1.1
+                GROUP BY song_title
+                ORDER BY count DESC 
+                LIMIT 5
+            ''')
+            fast_data = cursor.fetchall()
+            conn.close()
+
+            if fast_data:
+                # Prepare fast songs data for chart
+                fast_songs = [row[0] for row in fast_data]
+                fast_counts = [row[1] for row in fast_data]
+
+                # Create donut chart for fast songs
+                fig, ax = plt.subplots(figsize=(6, 4))
+
+                wedges, texts, autotexts = ax.pie(fast_counts, labels=None, autopct='%1.1f%%',
+                                                startangle=90, wedgeprops=dict(width=0.3))
+                ax.set_title("Top 5 Fast Songs (>= 1.1x)", fontsize=14)
+
+                center_circle = plt.Circle((0, 0), 0.70, fc='white')
+                fig.gca().add_artist(center_circle)
+
+                ax.legend(wedges, fast_songs, title="Fast Songs", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+
+                # Save the chart to a buffer
+                buf = BytesIO()
+                plt.savefig(buf, format='png', bbox_inches='tight')
+                buf.seek(0)
+
+                file = discord.File(fp=buf, filename="top5_fast_songs.png")
+                await ctx.send(file=file)
+
+                # Close the buffer and clear the plot
+                buf.close()
+                plt.clf()
+            else:
+                await ctx.send("No data available for fast songs.")
 
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
