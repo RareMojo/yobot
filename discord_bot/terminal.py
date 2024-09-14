@@ -2,10 +2,10 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from utils.terminal_cmds import (exit_bot_terminal, ping, set_bot_avatar,
-                                       set_bot_name, set_bot_presence,
-                                       set_owner, show_aliases,
-                                       show_help, sync_commands,
-                                       toggle_debug_mode, wipe_config)
+                                 set_bot_name, set_bot_presence,
+                                 set_owner, show_aliases,
+                                 show_help, sync_commands,
+                                 toggle_debug_mode, wipe_config)
 
 if TYPE_CHECKING:
     from discord_bot.bot import Bot
@@ -44,6 +44,7 @@ async def terminal_command_loop(bot: "Bot"):
 
         command_handler = TerminalCommands(bot, await terminal_command)
         await command_handler.handle_terminal_command()
+
 
 class TerminalCommands:
     """
@@ -104,7 +105,7 @@ class TerminalCommands:
         elif user_command in ["setowner", "setown"]:
             self.bot.log.debug("Setting owner...")
             await set_owner(self.bot)
-        
+
         elif user_command in ["reload", "sync", "r"]:
             self.bot.log.debug("Syncing commands...")
             await sync_commands(self.bot)

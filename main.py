@@ -4,17 +4,17 @@ from pathlib import Path
 from discord_bot.build import BuildBot
 from utils.tools import make_filepaths
 
-#   __                                             __                               
-#  /\ \     __                                    /\ \                        __    
-#  \_\ \   /\_\     ____    ___     ___    _ __   \_\ \               __     /\_\   
-#  /'_` \  \/\ \   /',__\  /'___\  / __`\ /\`'__\ /'_` \   _______  /'__`\   \/\ \  
-# /\ \L\ \  \ \ \ /\__, `\/\ \__/ /\ \L\ \\ \ \/ /\ \L\ \ /\______\/\ \L\.\_  \ \ \ 
-# \ \___,_\  \ \_\\/\____/\ \____\\ \____/ \ \_\ \ \___,_\\/______/\ \__/.\_\  \ \_\
-#  \/__,_ /   \/_/ \/___/  \/____/ \/___/   \/_/  \/__,_ /          \/__/\/_/   \/_/
-#                                                                                                                                                                                                                                                                                                                                
+#                     __                 __
+#                    /\ \               /\ \__
+#  __  __      ___   \ \ \____    ___   \ \ ,_\
+# /\ \/\ \    / __`\  \ \ '__`\  / __`\  \ \ \/
+# \ \ \_\ \  /\ \L\ \  \ \ \L\ \/\ \L\ \  \ \ \_
+#  \/`____ \ \ \____/   \ \_,__/\ \____/   \ \__\
+#   `/___/> \ \/___/     \/___/  \/___/     \/__/
+#      /\___/
+#      \/__/
 #
-# yobot: A Discord bot written in Python with LangChain and ChatGPT integration.
-# This bot's primary objective in life is to assist in fulfilling gpt-engineering's mission.
+# yobot: A Cog driven Discord bot written in Python.
 # Thanks and have fun yall! -RareMojo
 
 

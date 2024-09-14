@@ -24,7 +24,7 @@ class BuildBot(Bot):
         self.log_file = self.logs_dir / "latest.log"
         self.config_file = self.paths["configs"] / "config.json"
         self.data_dir = self.paths["data"]
-        
+
     def __setup_logger__(self, config: dict):
         """
         Sets up the logger for the bot.
@@ -83,7 +83,8 @@ class BuildBot(Bot):
             self.log.debug("Checking for cogs directory...")
 
             if not os.path.isdir(cogs_dir):
-                self.log.debug("Cogs directory not found. Creating cogs directory...")
+                self.log.debug(
+                    "Cogs directory not found. Creating cogs directory...")
                 os.mkdir(cogs_dir)
             else:
                 self.log.debug("Cogs directory found.")
@@ -134,7 +135,7 @@ class BuildBot(Bot):
 
         with open(self.config_file, "r") as f:
             self.config = json.load(f)
-            
+
         self.__setup_logger__(self.config)
         self.__setup_cogs__(self.cogs_dir)
 

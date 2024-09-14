@@ -67,18 +67,26 @@ def get_new_config():
       >>> get_new_config()
       {
           "owner_name": "",
+          "owner_id": "",
           "prefix": "",
           "bot_name": "",
           "presence": "",
+          "music_volume": 25,
+          "music_channel_ids": ["", ""],
+          "ffmpeg": "",
           "log_level": "INFO",
           "update_bot": True,
       }
     """
     return {
         "owner_name": input("Owner Name: "),
-        "prefix": input("Command Prefix: "),
+        "owner_id": int(input("Owner ID: ")),
+        "prefix": "/",
         "bot_name": input("Bot Name: "),
         "presence": input("Presence: "),
+        "music_volume": 25,
+        "music_channel_ids": [int(input("Music Channel ID: ")), 12345678],
+        "ffmpeg": "",
         "log_level": "INFO",
         "update_bot": True,
     }
@@ -132,7 +140,8 @@ async def update_with_discord(bot: "Bot") -> None:
         bot.log.warning(
             "This action is rate limited, so to change it later, edit the config file."
         )
-        bot.log.warning("You may also manually set these attributes with the terminal.")
+        bot.log.warning(
+            "You may also manually set these attributes with the terminal.")
 
         try:
             with open(bot.avatar_file, "rb") as f:
@@ -152,7 +161,8 @@ async def update_with_discord(bot: "Bot") -> None:
 
         if successful == True:
             update = False
-            bot.log.debug("Successfully synchronized bot settings with Discord.")
+            bot.log.debug(
+                "Successfully synchronized bot settings with Discord.")
             bot.config["update_bot"] = update
 
             with open(bot.config_file, "w") as f:
@@ -210,12 +220,14 @@ def make_filepaths(paths: dict):
         if path.suffix:
             path.parent.mkdir(parents=True, exist_ok=True)
         else:
-            path.mkdir(parents=True, exist_ok=True)          
-                   
+            path.mkdir(parents=True, exist_ok=True)
+
+
 def create_embed(title: str, description: str, color: discord.Color, thumbnail: str = None):
     """Create and return an embedded message."""
     embed = discord.Embed(title=title, description=description, color=color)
     if thumbnail:
-      embed.set_thumbnail(url=thumbnail)
-    embed.set_footer(text="  yobot | " + datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + " UTC")
+        embed.set_thumbnail(url=thumbnail)
+    embed.set_footer(text="  yobot | " +
+                     datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + " UTC")
     return embed

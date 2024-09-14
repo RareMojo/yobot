@@ -85,7 +85,8 @@ def wipe_config(bot: "Bot") -> None:
     """
     try:
         bot.log.warning("This will wipe the config file and shut down Bot.")
-        wipe = get_boolean_input(bot, "Do you want to wipe the config file? (y/n) ")
+        wipe = get_boolean_input(
+            bot, "Do you want to wipe the config file? (y/n) ")
 
         if wipe == True:
             wipe_confirm = get_boolean_input(
@@ -207,7 +208,8 @@ async def set_bot_avatar(bot: "Bot") -> None:
             except Exception as e:
                 bot.log.error("Error: {}".format(e))
                 bot.log.warning("Avatar not changed on Discord servers.")
-                bot.log.warning("It will automatically be changed on the next startup.")
+                bot.log.warning(
+                    "It will automatically be changed on the next startup.")
                 successful = False
 
             if successful == True:
@@ -215,7 +217,8 @@ async def set_bot_avatar(bot: "Bot") -> None:
                     new_data = {"update_bot": True}
                     update_config(config_file, new_data)
                 except Exception as e:
-                    bot.log.debug(f"Failed to update the configuration file: {e}")
+                    bot.log.debug(
+                        f"Failed to update the configuration file: {e}")
                     return bot.log.warning("Failed to set update flag.")
 
             if successful == True:
@@ -357,6 +360,7 @@ async def set_owner(bot: "Bot") -> None:
 
     except Exception as e:
         bot.log.error(f"Error in set_owner function: {e}")
+
 
 def show_help(bot: "Bot") -> None:
     """

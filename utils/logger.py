@@ -170,10 +170,12 @@ class LoggerRotator(RotatingFileHandler):
 
         if os.path.isfile(self.log_file):
             if os.path.isfile(os.path.join(os.path.dirname(self.log_file), "old.log")):
-                os.remove(os.path.join(os.path.dirname(self.log_file), "old.log"))
+                os.remove(os.path.join(
+                    os.path.dirname(self.log_file), "old.log"))
 
             os.rename(
-                self.log_file, os.path.join(os.path.dirname(self.log_file), "old.log")
+                self.log_file, os.path.join(
+                    os.path.dirname(self.log_file), "old.log")
             )
 
         super().__init__(log_file, mode, maxBytes, backupCount, encoding)

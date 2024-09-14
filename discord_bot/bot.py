@@ -10,9 +10,7 @@ from discord_bot.terminal import terminal_command_loop
 
 load_dotenv()
 
-BOT_CHAT_CHANNEL = int(os.getenv("BOT_CHAT_CHANNEL", 0))
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 
 if TYPE_CHECKING:
     from discord import Intents
@@ -51,15 +49,13 @@ class Bot(commands.Bot):
         self.cogs_dir = self.paths["cogs"]
         self.data_dir = self.paths["data"]
         self.text_logo = self.paths["assets"] / "texts" / "logo.txt"
-        self.guild_id = int(GUILD_ID) if GUILD_ID else None
-        self.bot_chat_channel = BOT_CHAT_CHANNEL
         self.discord_token = str(DISCORD_TOKEN)
-        self.ffmpeg_path = 'ffmpeg'
 
         with open(self.config_file, "r") as f:
             self.config = json.load(f)
 
         self.display_name = self.config.get("bot_name")
+        self.ffmpeg_path = self.config.get("ffmpeg")
 
         super().__init__(command_prefix=self.config.get("prefix"), intents=intents)
         self.log.debug("Bot initialized.")
@@ -70,7 +66,8 @@ class Bot(commands.Bot):
         self.log.info("Bot starting...")
         await self.load_cogs()
 
-        bot_task = asyncio.create_task(self.start(self.discord_token), name="bot")
+        bot_task = asyncio.create_task(
+            self.start(self.discord_token), name="bot")
 
         try:
             while self.running:
@@ -81,20 +78,21 @@ class Bot(commands.Bot):
 
         finally:
             bot_task.cancel()
-            
+
     async def start_terminal_command_loop(self):
         """Starts the terminal command loop."""
         self.log.debug("Starting terminal command loop...")
-        
-        terminal_task = asyncio.create_task(terminal_command_loop(self), name="terminal")
-        
+
+        terminal_task = asyncio.create_task(
+            terminal_command_loop(self), name="terminal")
+
         try:
             while self.running:
                 await asyncio.sleep(2)
-        
+
         except Exception as e:
             self.log.error(f"Terminal encountered an error: {e}")
-        
+
         finally:
             terminal_task.cancel()
 
@@ -124,10 +122,12 @@ class Bot(commands.Bot):
                         loaded_extensions.append(filename[:-3])
                         total_loaded_extensions += 1
                 if loaded_extensions:
-                    package_name = "Standalone Cogs" if dirpath == self.cogs_dir else os.path.basename(dirpath)
+                    package_name = "Standalone Cogs" if dirpath == self.cogs_dir else os.path.basename(
+                        dirpath)
                     self.log.debug("Loaded:")
                     self.log.debug(f"Package Name: {package_name}")
-                    self.log.debug(f"Extensions: {', '.join(loaded_extensions)}")
+                    self.log.debug(
+                        f"Extensions: {', '.join(loaded_extensions)}")
         except Exception as e:
             raise e
         self.log.info(f"Loaded total {total_loaded_extensions} cogs.")

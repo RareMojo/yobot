@@ -4,7 +4,7 @@ import asyncio
 import time
 import re
 import os
-from cogs.Music.music_utils import generate_progress_bar, format_time
+from cogs.Music.music_utils import generate_progress_bar, format_time, find_similar_song_title
 from utils.logger import log_error, log_debug
 import sqlite3
 
@@ -23,38 +23,28 @@ class MusicPlayer:
         self.player_message = player_message
         self.is_playing = False
         self.current_song_url = None
-        self.initialize_db()
+        self.initialize_music_db()
 
-    def initialize_db(self):
+    def initialize_music_db(self):
         """Initialize the SQLite database and create the required tables."""
-        conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+        conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
         cursor = conn.cursor()
 
-        # Enable foreign key support
+        # idk some foreign key support
         cursor.execute('PRAGMA foreign_keys = ON;')
 
-        # Existing table for song requests, now with a duration column
+        # music tracking table
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_requests (
+            CREATE TABLE IF NOT EXISTS user_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id TEXT NOT NULL,
                 user_name TEXT NOT NULL,
                 song_title TEXT NOT NULL,
                 song_url TEXT NOT NULL,
-                playback_speed REAL NOT NULL,
-                duration REAL NOT NULL,
+                playback_speed REAL,  -- Optional, used only for song requests
+                duration REAL,        -- Optional, used only for song requests
+                action TEXT NOT NULL,  -- 'request', 'like', or 'skip'
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # New table for tracking likes
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS song_likes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                song_id INTEGER NOT NULL,
-                user_id TEXT NOT NULL,
-                FOREIGN KEY(song_id) REFERENCES user_requests(id),
-                UNIQUE(song_id, user_id)
             )
         ''')
 
@@ -73,15 +63,18 @@ class MusicPlayer:
         else:
             embed.set_thumbnail(url="https://i.imgur.com/tSuXN8P.png")
 
-        next_song_field = "No more songs in the queue"
-        if self.queue:
+        if len(self.queue) > 0:
             next_url, _ = self.queue[0]
             next_song_field = f"[Next Song]({next_url})"
+        else:
+            next_song_field = "No more songs in the queue"
 
         embed.add_field(name="Up Next", value=next_song_field, inline=False)
-        embed.add_field(name="Progress", value="[00:00] ▰▰▰▱▱▱▱▱▱▱ 00:00", inline=False)
+        embed.add_field(name="Progress",
+                        value="[00:00] ▰▰▰▱▱▱▱▱▱▱ 00:00", inline=False)
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
 
+        # update the message or make a new one
         if self.player_message:
             try:
                 await self.player_message.edit(embed=embed)
@@ -120,10 +113,16 @@ class MusicPlayer:
             next_song_field = "No more songs in the queue"
             if self.queue:
                 next_url, _ = self.queue[0]
-                next_song_field = f"[Next Song]({next_url})"
+                next_title = self.queue[0][0].split('/')[-1]
+                # if next url isnt a url change the next song field
+                if not next_url.startswith('http'):
+                    next_song_field = f"[{next_title}]"
+                else:
+                    next_song_field = f"[{next_title}]({next_url})"
 
             embed.clear_fields()
-            embed.add_field(name="Up Next", value=next_song_field, inline=False)
+            embed.add_field(
+                name="Up Next", value=next_song_field, inline=False)
             embed.add_field(
                 name="Progress",
                 value=f"[{format_time(elapsed_time)}] {progress_bar} {format_time(duration)}",
@@ -171,13 +170,20 @@ class MusicPlayer:
                 if not media_url:
                     raise ValueError("Failed to extract media URL")
 
-                # Insert song request into the database
-                conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+                conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
                 cursor = conn.cursor()
+
+                song_title = info['title']
+                similar_title = find_similar_song_title(cursor, song_title)
+
+                if similar_title:
+                    song_title = similar_title
+
                 cursor.execute('''
-                    INSERT INTO user_requests (user_id, user_name, song_title, song_url, playback_speed, duration)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (str(ctx.author.id), ctx.author.display_name, info['title'], info['webpage_url'], playback_speed, info['duration']))
+                    INSERT INTO user_actions (user_id, user_name, song_title, song_url, playback_speed, duration, action)
+                    VALUES (?, ?, ?, ?, ?, ?, 'request')
+                ''', (str(ctx.author.id), ctx.author.display_name, song_title, info['webpage_url'], playback_speed, info['duration']))
+
                 conn.commit()
                 conn.close()
 
@@ -214,7 +220,8 @@ class MusicPlayer:
         """Plays the next song in the queue, if available."""
         if self.queue:
             next_url, playback_speed = self.queue.pop(0)
-            voice_client = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+            voice_client = discord.utils.get(
+                self.bot.voice_clients, guild=ctx.guild)
 
             if voice_client and voice_client.is_connected():
                 self.is_playing = True
@@ -244,11 +251,19 @@ class MusicPlayer:
             if e.code != 10008:
                 pass
             else:
+                if e.code == 10008:
+                    pass
                 log_error(self.bot, f"Error in after play callback: {e}")
 
     async def delete_player_embed(self):
-        """Deletes the player embed if it exists."""
         if self.player_message:
-            await self.player_message.delete()
-            self.player_message = None
+            try:
+                await self.player_message.delete()
+                self.player_message = None
 
+            except Exception as e:
+                if e == discord.NotFound or e == discord.HTTPException:
+                    log_error(
+                        self.bot, f"Failed to delete player message: {e}")
+                else:
+                    pass
