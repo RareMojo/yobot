@@ -5,6 +5,7 @@ from utils.logger import log_debug, log_error
 from utils.tools import update_config, create_embed
 import asyncio
 from datetime import datetime
+import sqlite3
 
 from typing import TYPE_CHECKING
 
@@ -58,12 +59,15 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
 
     async def idle_disconnect(self, ctx):
         """Disconnects the bot if it is idle for 5 minutes."""
-        await asyncio.sleep(300)
+        await asyncio.sleep(300)  # Wait for 5 minutes (300 seconds)
         voice_client = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+        
         if voice_client and not voice_client.is_playing():
-            embed = create_embed("Idle Disconnect", "You haven't played anything in a while.", discord.Color.orange(), self.thumbnail)
-            await ctx.send(embed=embed)
+            await ctx.send("Idle for 5 minutes, disconnecting...", delete_after=10)
+            
             await asyncio.sleep(8)
+            await message.delete() 
+            
             await voice_client.disconnect()
             self.player.is_playing = False
             await self.player.delete_player_embed()
@@ -90,7 +94,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 await self.player._play_youtube_audio(ctx, voice_client, song, volume=self.music_volume / 100)
                 self.bot.loop.create_task(self.idle_disconnect(ctx))
             except Exception as e:
-                log_error(self.bot, f"Error playing {song}: {e}")
+                log_error(self.bot, f"Error playing {song}, check what you sent or report this: {e}")
                 self.player.is_playing = False
                 
     @commands.hybrid_command(name="slowplay", help="Plays a song at 0.75x speed.")
@@ -125,7 +129,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 # start the idle disconnect task
                 self.bot.loop.create_task(self.idle_disconnect(ctx))
             except Exception as e:
-                await ctx.send(f"An error occurred: {e}")
+                await ctx.send(f"Check what you sent or report this: {e}")
                 log_error(
                     self.bot, f"Error playing {song} at {label} speed: {e}")
                 self.player.is_playing = False
@@ -241,51 +245,20 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
         else:
             embed = create_embed("No Audio", "No audio is playing.", discord.Color.red(), self.thumbnail)
             await ctx.send(embed=embed)
-
-    @commands.hybrid_command(name="helpmusic", help="Displays help with available commands.")
-    async def help_command(self, ctx):
-        """Displays help with available commands."""
-        if ctx.message.channel.id not in self.music_channel_ids:
-            embed = create_embed("Music Text Channel Required", "You need type in the music chat to use this command!", discord.Color.red(), self.thumbnail)
-            await ctx.send(embed=embed)
-            return None
-        
-        help_embed = discord.Embed(
-            title="Help - Available Commands",
-            description="Here are the available commands you can use:",
-            color=discord.Color.blurple()
-        )
-
-        for command in self.bot.commands:
-            if not command.hidden and await command.can_run(ctx):
-                help_embed.add_field(
-                    name=f"/{command.name}",
-                    value=command.help or "No description available.",
-                    inline=False
-                )
-
-        help_embed.set_footer(
-            text="Use the commands with / followed by the command name.\n\n  yobot | " + datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + " UTC"
-        )
-        await ctx.send(embed=help_embed)
-
+                
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
-        """Handles the reactions added to the player embed."""
-        if user.bot:
-            return  # Ignore bot reactions
-        
+
         message = reaction.message
 
         if message.id != self.player.player_message.id:
-            return  # Ignore reactions on other messages
+            return
 
-        # Only handle reactions for the current player message
         if reaction.emoji == '▶️':
             voice_client = discord.utils.get(self.bot.voice_clients, guild=message.guild)
             if voice_client and not voice_client.is_playing():
                 voice_client.resume()
-        if reaction.emoji == '⏸️':
+        elif reaction.emoji == '⏸️':
             voice_client = discord.utils.get(self.bot.voice_clients, guild=message.guild)
             if voice_client and voice_client.is_playing():
                 voice_client.pause()
@@ -301,8 +274,20 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
             if voice_client and voice_client.is_playing():
                 voice_client.stop()
         elif reaction.emoji == '❤️':
-            pass
-            
+            conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+            conn.execute('PRAGMA foreign_keys = ON;')  # Ensure foreign key constraints are enforced
+            cursor = conn.cursor()
+            try:
+                cursor.execute('SELECT id FROM user_requests WHERE song_url = ?', (self.player.current_song_url,))
+                song_id = cursor.fetchone()
+                if song_id:
+                    cursor.execute('INSERT INTO song_likes (song_id, user_id) VALUES (?, ?)', (song_id[0], str(user.id)))
+                    conn.commit()
+            except sqlite3.Error as e:
+                conn.rollback()  # Explicitly rollback on error
+            finally:
+                conn.close()
+
 async def setup(bot: "Bot"):
     """Loads the cog."""
     try:

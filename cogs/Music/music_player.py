@@ -6,6 +6,13 @@ import re
 import os
 from cogs.Music.music_utils import generate_progress_bar, format_time
 from utils.logger import log_error, log_debug
+import sqlite3
+
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from discord_bot.bot import Bot
 
 
 class MusicPlayer:
@@ -15,6 +22,44 @@ class MusicPlayer:
         self.current_video_info = current_video_info
         self.player_message = player_message
         self.is_playing = False
+        self.current_song_url = None
+        self.initialize_db()
+
+    def initialize_db(self):
+        """Initialize the SQLite database and create the required tables."""
+        conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+        cursor = conn.cursor()
+
+        # Enable foreign key support
+        cursor.execute('PRAGMA foreign_keys = ON;')
+
+        # Existing table for song requests, now with a duration column
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                user_name TEXT NOT NULL,
+                song_title TEXT NOT NULL,
+                song_url TEXT NOT NULL,
+                playback_speed REAL NOT NULL,
+                duration REAL NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # New table for tracking likes
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS song_likes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                song_id INTEGER NOT NULL,
+                user_id TEXT NOT NULL,
+                FOREIGN KEY(song_id) REFERENCES user_requests(id),
+                UNIQUE(song_id, user_id)
+            )
+        ''')
+
+        conn.commit()
+        conn.close()
 
     async def create_player_embed(self, ctx, url, title, playback_speed=1.0, thumbnail='https://i.imgur.com/tSuXN8P.png'):
         """Creates or updates the player embed."""
@@ -45,7 +90,7 @@ class MusicPlayer:
         else:
             self.player_message = await ctx.send(embed=embed)
 
-        reactions = ['▶️', '⏸️', '⏹️', '⏭️', '❤️']  # Play, Pause, Stop, Skip, Like
+        reactions = ['▶️', '⏸️', '⏹️', '⏭️', '❤️']
         for reaction in reactions:
             await self.player_message.add_reaction(reaction)
 
@@ -114,7 +159,7 @@ class MusicPlayer:
                 'preferredquality': '198',
             }],
             'writethumbnail': True,
-            'outtmpl': 'thumbnails/%(id)s.%(ext)s',  # temp save with video id
+            'outtmpl': 'thumbnails/%(id)s.%(ext)s',
         }
 
         try:
@@ -126,15 +171,19 @@ class MusicPlayer:
                 if not media_url:
                     raise ValueError("Failed to extract media URL")
 
-                # fix this hard coded path later
-                thumbnail_path = f"/home/mojo/Code/assets/thumbnails/{info['id']}.jpg"  # Adjust based on expected extension
+                # Insert song request into the database
+                conn = sqlite3.connect(self.bot.data_dir / 'music_stats.db')
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO user_requests (user_id, user_name, song_title, song_url, playback_speed, duration)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (str(ctx.author.id), ctx.author.display_name, info['title'], info['webpage_url'], playback_speed, info['duration']))
+                conn.commit()
+                conn.close()
 
-                if not os.path.exists(thumbnail_path):
-                    thumbnail_url = info['thumbnail']  # fail over to default thumbnail
-                else:
-                    thumbnail_url = f"file://{os.path.abspath(thumbnail_path)}"  # using local file
-
+                thumbnail_url = info['thumbnail']
                 self.current_video_info = info
+                self.current_song_url = self.current_video_info['webpage_url']
                 await self.create_player_embed(ctx, info['webpage_url'], info['title'], playback_speed, thumbnail_url)
 
                 ffmpeg_options = self._get_ffmpeg_options(playback_speed)
@@ -154,7 +203,7 @@ class MusicPlayer:
         if playback_speed != 1.0:
             return {
                 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                'options': f'-vn -filter:a "asetrate=48000*{playback_speed},aresample=48000"',
+                'options': f'-vn -filter:a "asetrate=48000*{playback_speed},aresample=48000"'
             }
         return {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -165,15 +214,13 @@ class MusicPlayer:
         """Plays the next song in the queue, if available."""
         if self.queue:
             next_url, playback_speed = self.queue.pop(0)
-            voice_client = discord.utils.get(
-                self.bot.voice_clients, guild=ctx.guild)
+            voice_client = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
             if voice_client and voice_client.is_connected():
                 self.is_playing = True
                 await self.delete_player_embed()
 
                 await self.create_player_embed(ctx, next_url, self.current_video_info['title'], playback_speed)
-
                 await self._play_youtube_audio(ctx, voice_client, next_url, playback_speed)
             else:
                 await self.stop_playing(ctx)
@@ -194,7 +241,6 @@ class MusicPlayer:
         try:
             future.result()
         except Exception as e:
-            # ignore if it is 10008 (message already deleted)
             if e.code != 10008:
                 pass
             else:
@@ -205,3 +251,4 @@ class MusicPlayer:
         if self.player_message:
             await self.player_message.delete()
             self.player_message = None
+

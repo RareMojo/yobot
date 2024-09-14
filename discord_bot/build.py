@@ -23,6 +23,7 @@ class BuildBot(Bot):
         self.cogs_dir = self.paths["cogs"]
         self.log_file = self.logs_dir / "latest.log"
         self.config_file = self.paths["configs"] / "config.json"
+        self.data_dir = self.paths["data"]
         
     def __setup_logger__(self, config: dict):
         """

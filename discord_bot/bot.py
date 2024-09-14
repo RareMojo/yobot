@@ -49,6 +49,8 @@ class Bot(commands.Bot):
         self.config_file = self.paths["configs"] / "config.json"
         self.avatar_file = self.paths["assets"] / "images" / "avatar.png"
         self.cogs_dir = self.paths["cogs"]
+        self.data_dir = self.paths["data"]
+        self.text_logo = self.paths["assets"] / "texts" / "logo.txt"
         self.guild_id = int(GUILD_ID) if GUILD_ID else None
         self.bot_chat_channel = BOT_CHAT_CHANNEL
         self.discord_token = str(DISCORD_TOKEN)
