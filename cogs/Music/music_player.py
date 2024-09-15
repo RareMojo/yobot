@@ -66,11 +66,10 @@ class MusicPlayer:
         if len(self.queue) > 0:
             next_url, _ = self.queue[0]
             next_song_field = f"[Next Song]({next_url})"
-            embed.add_field(name="Up Next", value=next_song_field, inline=False)
         else:
             next_song_field = "No more songs in the queue"
-            embed.add_field(name="Up Next", value=next_song_field, inline=False)
 
+        embed.add_field(name="Up Next", value=next_song_field, inline=False)
         embed.add_field(name="Progress",
                         value="[00:00] ▰▰▰▱▱▱▱▱▱▱ 00:00", inline=False)
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
@@ -120,10 +119,10 @@ class MusicPlayer:
                     next_song_field = f"[{next_title}]"
                 else:
                     next_song_field = f"[{next_title}]({next_url})"
-                embed.clear_fields()
-                embed.add_field(name="Up Next", value=next_song_field, inline=False)
 
             embed.clear_fields()
+            embed.add_field(
+                name="Up Next", value=next_song_field, inline=False)
             embed.add_field(
                 name="Progress",
                 value=f"[{format_time(elapsed_time)}] {progress_bar} {format_time(duration)}",
@@ -141,7 +140,7 @@ class MusicPlayer:
 
             if elapsed_time >= duration:
                 break
-
+            
     async def _play_youtube_audio(self, ctx, voice_client, video_url=None, playback_speed=1.0, volume=0.2):
         """Plays YouTube audio and updates the player UI."""
         url_regex = re.compile(
@@ -193,26 +192,27 @@ class MusicPlayer:
                     await self.create_player_embed(ctx, info['webpage_url'], info['title'], playback_speed, thumbnail_url)
 
                     ffmpeg_options = self._get_ffmpeg_options(playback_speed)
-                    source = discord.FFmpegPCMAudio(
-                        media_url, executable=self.bot.ffmpeg_path, **ffmpeg_options)
-                    voice_client.play(discord.PCMVolumeTransformer(
-                        source, volume=volume), after=lambda e: self._after_play(ctx))
+                    source = discord.FFmpegPCMAudio(media_url, executable=self.bot.ffmpeg_path, **ffmpeg_options)
 
+                    await asyncio.sleep(2) # preload delay
+                    
+                    voice_client.play(discord.PCMVolumeTransformer(source, volume=volume), after=lambda e: self._after_play(ctx))
                     await self.update_progress_bar(voice_client, info, playback_speed, ctx.author, thumbnail_url)
 
         except Exception as e:
             log_error(self.bot, f"Error playing audio: {e}")
             raise e
-
+        
     def _get_ffmpeg_options(self, playback_speed):
         """Returns the appropriate FFmpeg options depending on the playback speed."""
+        preload_time = 2  # Number of seconds to preload
         if playback_speed != 1.0:
             return {
-                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+                'before_options': f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ss {preload_time}',
                 'options': f'-vn -filter:a "asetrate=48000*{playback_speed},aresample=48000"'
             }
         return {
-            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'before_options': f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ss {preload_time}',
             'options': '-vn',
         }
 

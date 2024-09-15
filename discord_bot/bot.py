@@ -88,7 +88,7 @@ class Bot(commands.Bot):
 
         try:
             while self.running:
-                await asyncio.sleep(2)
+                await asyncio.sleep(3)
 
         except Exception as e:
             self.log.error(f"Terminal encountered an error: {e}")
