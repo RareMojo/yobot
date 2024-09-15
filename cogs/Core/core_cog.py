@@ -20,25 +20,24 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
 
     def initialize_core_db(self):
         """Initialize the SQLite database and create the required tables."""
-        conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-        cursor = conn.cursor()
+        with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
+            cursor = conn.cursor()
 
-        # idk some foreign key support
-        cursor.execute('PRAGMA foreign_keys = ON;')
+            # idk some foreign key support
+            cursor.execute('PRAGMA foreign_keys = ON;')
 
-        # commands tracking table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS command_usage (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                command_name TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                user_name TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+            # commands tracking table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS command_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    command_name TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    user_name TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
     @commands.Cog.listener()
     async def on_connect(self):
@@ -85,7 +84,7 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
                 cog_name = cog_name[:-3]
             commands_list += f"-= {cog_name} Commands =-\n\n"
             for command in commands:
-                command_line = f"/{command.name:<15} - {command.help or 'No description available.'}\n"
+                command_line = f"/{command.name:<20} - {command.help or 'No description available.'}\n"
                 commands_list += command_line
             commands_list += "\n"
 
@@ -109,7 +108,8 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
                 await ctx.author.send(f"```{chunk}```")
             await ctx.send("I’ve sent you a DM with the available commands!", delete_after=8)
         except discord.Forbidden:
-            await ctx.send("I couldn’t send you a DM. Please check your DM settings.", delete_after=8)
+            await ctx.send("I couldn’t send you a DM. Please check your DM settings or contact an Admin.", delete_after=8)
+            log_debug(self.bot, "User or server has DMs disabled.")
 
     @commands.hybrid_command(name="prune", description="Delete a specified number of the bot's messages, except for certain command responses.")
     @commands.has_permissions(manage_messages=True)
@@ -128,17 +128,14 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
         def is_bot_message(message):
             return message.author == self.bot.user
 
+        # a means of protecting certain messages from deletion
         protected_phrases = [
-            "Playing the most recent song request",
-            "Song Added to the queue",
-            "Song added at slowplay speed",
-            "Song added at",
-            "Playing",
-            "favorite song",
-            "Playing most liked song",
-            "most recent song request",
-            "Now Playing",
-            "Next Song",
+            "Song Requested",  # music requests
+            "Added song",  # music requests
+            "Added to queue",  # legacy music requests
+            "added to the queue",  # legacy music requests
+            "Now Playing",  # music player
+            "Progress",  # music player fail over
         ]
 
         def is_protected_message(message):
@@ -161,8 +158,11 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
             await ctx.send("Some messages were not found.")
         except commands.errors.Forbidden:
             await ctx.send("I don't have permission to delete messages in this channel.")
+            log_debug(
+                self.bot, "Bot doesn't have permission to delete message in this channel.")
         except Exception as e:
-            await ctx.send(f"An error occurred: {str(e)}")
+            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(self.bot, f"Error in prune: {e}")
 
     @commands.Cog.listener()
     async def on_command(self, ctx: commands.Context):
@@ -172,49 +172,49 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
         user_name = ctx.author.display_name
 
         # log command usage
-        conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-        cursor = conn.cursor()
+        with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
+            cursor = conn.cursor()
 
-        cursor.execute('''
-            INSERT INTO command_usage (command_name, user_id, user_name)
-            VALUES (?, ?, ?)
-        ''', (command_name, user_id, user_name))
+            cursor.execute('''
+                INSERT INTO command_usage (command_name, user_id, user_name)
+                VALUES (?, ?, ?)
+            ''', (command_name, user_id, user_name))
 
         conn.commit()
-        conn.close()
 
     @commands.hybrid_command(name="commandstats", help="Show how often commands have been executed.")
     async def command_stats(self, ctx):
         """Show how often each command has been requested."""
         try:
-            conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-            cursor = conn.cursor()
+            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
+                cursor = conn.cursor()
 
-            cursor.execute('''
-                SELECT command_name, COUNT(*) AS count 
-                FROM command_usage
-                GROUP BY command_name
-                ORDER BY count DESC
-            ''')
-            results = cursor.fetchall()
+                cursor.execute('''
+                    SELECT command_name, COUNT(*) AS count 
+                    FROM command_usage
+                    GROUP BY command_name
+                    ORDER BY count DESC
+                ''')
+                results = cursor.fetchall()
 
-            if results:
-                embed = discord.Embed(
-                    title="Command Usage Statistics", color=discord.Color.green())
-                for command_name, count in results:
-                    embed.add_field(name=command_name,
-                                    value=f"{count} times", inline=False)
-                await ctx.send(embed=embed)
-            else:
-                await ctx.send("No command usage data available.")
+                if results:
+                    embed = discord.Embed(
+                        title="Command Usage Statistics", color=discord.Color.green())
+                    for command_name, count in results:
+                        embed.add_field(name=command_name,
+                                        value=f"{count} times", inline=False)
+                    await ctx.send(embed=embed)
+                else:
+                    await ctx.send("No command usage data available.")
 
         except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database: {str(e)}")
+            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Database error in command {ctx.command}: {str(e)}")
         except Exception as e:
-            await ctx.send(f"An unexpected error occurred: {str(e)}")
-        finally:
-            if conn:
-                conn.close()
+            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
 
     @commands.hybrid_command(name="commandstatsweek", help="Show detailed stats of commands executed in the past week.")
     async def command_stats_week(self, ctx):
@@ -222,42 +222,43 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
         try:
             one_week_ago = datetime.now() - timedelta(days=7)
 
-            conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-            cursor = conn.cursor()
+            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as con:
+                cursor = conn.cursor()
 
-            cursor.execute('''
-                SELECT command_name, COUNT(*) AS count
-                FROM command_usage
-                WHERE timestamp >= ?
-                GROUP BY command_name
-                ORDER BY count DESC
-            ''', (one_week_ago,))
+                cursor.execute('''
+                    SELECT command_name, COUNT(*) AS count
+                    FROM command_usage
+                    WHERE timestamp >= ?
+                    GROUP BY command_name
+                    ORDER BY count DESC
+                ''', (one_week_ago,))
 
-            results = cursor.fetchall()
+                results = cursor.fetchall()
 
-            if results:
-                embed = discord.Embed(
-                    title="Command Usage in the Past Week",
-                    description="Here’s a breakdown of the most used commands in the past 7 days:",
-                    color=discord.Color.blue()
-                )
+                if results:
+                    embed = discord.Embed(
+                        title="Command Usage in the Past Week",
+                        description="Here’s a breakdown of the most used commands in the past 7 days:",
+                        color=discord.Color.blue()
+                    )
 
-                for command_name, count in results:
-                    embed.add_field(name=command_name,
-                                    value=f"{count} times", inline=False)
+                    for command_name, count in results:
+                        embed.add_field(name=command_name,
+                                        value=f"{count} times", inline=False)
 
-                await ctx.send(embed=embed)
+                    await ctx.send(embed=embed)
 
-            else:
-                await ctx.send("No command usage data available for the past week.")
+                else:
+                    await ctx.send("No command usage data available for the past week.")
 
         except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database: {str(e)}")
+            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Database error in command {ctx.command}: {str(e)}")
         except Exception as e:
-            await ctx.send(f"An unexpected error occurred: {str(e)}")
-        finally:
-            if conn:
-                conn.close()
+            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
 
     @commands.hybrid_command(name="usercommandstatsweek", help="Show command usage stats for a specific user over the past week.")
     async def user_command_stats_week(self, ctx, user: discord.User = None):
@@ -270,42 +271,43 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
 
             one_week_ago = datetime.now() - timedelta(days=7)
 
-            conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-            cursor = conn.cursor()
+            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as con:
+                cursor = conn.cursor()
 
-            cursor.execute('''
-                SELECT command_name, COUNT(*) AS count
-                FROM command_usage
-                WHERE user_id = ? AND timestamp >= ?
-                GROUP BY command_name
-                ORDER BY count DESC
-            ''', (user_id, one_week_ago))
+                cursor.execute('''
+                    SELECT command_name, COUNT(*) AS count
+                    FROM command_usage
+                    WHERE user_id = ? AND timestamp >= ?
+                    GROUP BY command_name
+                    ORDER BY count DESC
+                ''', (user_id, one_week_ago))
 
-            results = cursor.fetchall()
+                results = cursor.fetchall()
 
-            if results:
-                embed = discord.Embed(
-                    title=f"Command Usage for {user.display_name} (Past Week)",
-                    description=f"Here’s a breakdown of the commands used by {user.mention} in the past 7 days:",
-                    color=discord.Color.blue()
-                )
+                if results:
+                    embed = discord.Embed(
+                        title=f"Command Usage for {user.display_name} (Past Week)",
+                        description=f"Here’s a breakdown of the commands used by {user.mention} in the past 7 days:",
+                        color=discord.Color.blue()
+                    )
 
-                for command_name, count in results:
-                    embed.add_field(name=command_name,
-                                    value=f"{count} times", inline=False)
+                    for command_name, count in results:
+                        embed.add_field(name=command_name,
+                                        value=f"{count} times", inline=False)
 
-                await ctx.send(embed=embed)
+                    await ctx.send(embed=embed)
 
-            else:
-                await ctx.send(f"No command usage data available for {user.mention} in the past week.")
+                else:
+                    await ctx.send(f"No command usage data available for {user.mention} in the past week.")
 
         except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database: {str(e)}")
+            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Database error in command {ctx.command}: {str(e)}")
         except Exception as e:
-            await ctx.send(f"An unexpected error occurred: {str(e)}")
-        finally:
-            if conn:
-                conn.close()
+            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
 
     @commands.hybrid_command(name="usercommandstats", help="Show all-time command usage stats for a specific user or yourself.")
     async def user_command_stats(self, ctx, user: discord.User = None):
@@ -316,42 +318,43 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
 
             user_id = str(user.id)
 
-            conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-            cursor = conn.cursor()
+            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as con:
+                cursor = conn.cursor()
 
-            cursor.execute('''
-                SELECT command_name, COUNT(*) AS count
-                FROM command_usage
-                WHERE user_id = ?
-                GROUP BY command_name
-                ORDER BY count DESC
-            ''', (user_id,))
+                cursor.execute('''
+                    SELECT command_name, COUNT(*) AS count
+                    FROM command_usage
+                    WHERE user_id = ?
+                    GROUP BY command_name
+                    ORDER BY count DESC
+                ''', (user_id,))
 
-            results = cursor.fetchall()
+                results = cursor.fetchall()
 
-            if results:
-                embed = discord.Embed(
-                    title=f"All-Time Command Usage for {user.display_name}",
-                    description=f"Here’s a breakdown of all-time command usage by {user.mention}:",
-                    color=discord.Color.green()
-                )
+                if results:
+                    embed = discord.Embed(
+                        title=f"All-Time Command Usage for {user.display_name}",
+                        description=f"Here’s a breakdown of all-time command usage by {user.mention}:",
+                        color=discord.Color.green()
+                    )
 
-                for command_name, count in results:
-                    embed.add_field(name=command_name,
-                                    value=f"{count} times", inline=False)
+                    for command_name, count in results:
+                        embed.add_field(name=command_name,
+                                        value=f"{count} times", inline=False)
 
-                await ctx.send(embed=embed)
+                    await ctx.send(embed=embed)
 
-            else:
-                await ctx.send(f"No command usage data available for {user.mention}.")
+                else:
+                    await ctx.send(f"No command usage data available for {user.mention}.")
 
         except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database: {str(e)}")
+            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Database error in command {ctx.command}: {str(e)}")
         except Exception as e:
-            await ctx.send(f"An unexpected error occurred: {str(e)}")
-        finally:
-            if conn:
-                conn.close()
+            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            log_error(
+                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
 
 
 async def setup(bot: "Bot"):

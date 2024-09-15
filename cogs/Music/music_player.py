@@ -4,7 +4,8 @@ import asyncio
 import time
 import re
 import os
-from cogs.Music.music_utils import generate_progress_bar, format_time, find_similar_song_title
+from cogs.Music.music_utils import generate_progress_bar, find_similar_song_title
+from utils.tools import format_time
 from utils.logger import log_error, log_debug
 import sqlite3
 
@@ -27,34 +28,33 @@ class MusicPlayer:
 
     def initialize_music_db(self):
         """Initialize the SQLite database and create the required tables."""
-        conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-        cursor = conn.cursor()
+        with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
+            cursor = conn.cursor()
 
-        # idk some foreign key support
-        cursor.execute('PRAGMA foreign_keys = ON;')
+            # idk some foreign key support
+            cursor.execute('PRAGMA foreign_keys = ON;')
 
-        # music tracking table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_actions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                user_name TEXT NOT NULL,
-                song_title TEXT NOT NULL,
-                song_url TEXT NOT NULL,
-                playback_speed REAL,  -- Optional, used only for song requests
-                duration REAL,        -- Optional, used only for song requests
-                action TEXT NOT NULL,  -- 'request', 'like', or 'skip'
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+            # music tracking table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    user_name TEXT NOT NULL,
+                    song_title TEXT NOT NULL,
+                    song_url TEXT NOT NULL,
+                    playback_speed REAL,  -- Optional, used only for song requests
+                    duration REAL,        -- Optional, used only for song requests
+                    action TEXT NOT NULL,  -- 'request', 'like', or 'skip'
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
     async def create_player_embed(self, ctx, url, title, playback_speed=1.0, thumbnail='https://i.imgur.com/tSuXN8P.png'):
         """Creates or updates the player embed."""
         embed = discord.Embed(
-            title="Now Playing",
+            title=":notes: Now Playing",
             description=f"[{title}]({url})",
             color=discord.Color.blurple()
         )
@@ -66,10 +66,11 @@ class MusicPlayer:
         if len(self.queue) > 0:
             next_url, _ = self.queue[0]
             next_song_field = f"[Next Song]({next_url})"
+            embed.add_field(name="Up Next", value=next_song_field, inline=False)
         else:
             next_song_field = "No more songs in the queue"
+            embed.add_field(name="Up Next", value=next_song_field, inline=False)
 
-        embed.add_field(name="Up Next", value=next_song_field, inline=False)
         embed.add_field(name="Progress",
                         value="[00:00] ▰▰▰▱▱▱▱▱▱▱ 00:00", inline=False)
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
@@ -83,7 +84,7 @@ class MusicPlayer:
         else:
             self.player_message = await ctx.send(embed=embed)
 
-        reactions = ['▶️', '⏸️', '⏹️', '⏭️', '❤️']
+        reactions = ['⏮️', '▶️', '⏸️', '⏹️', '⏭️', '❤️']
         for reaction in reactions:
             await self.player_message.add_reaction(reaction)
 
@@ -99,7 +100,7 @@ class MusicPlayer:
             progress_bar = generate_progress_bar(progress_percentage)
 
             embed = discord.Embed(
-                title="Now Playing",
+                title=":notes: Now Playing",
                 description=f"[{title}]({url})",
                 color=discord.Color.blurple()
             )
@@ -119,10 +120,10 @@ class MusicPlayer:
                     next_song_field = f"[{next_title}]"
                 else:
                     next_song_field = f"[{next_title}]({next_url})"
+                embed.clear_fields()
+                embed.add_field(name="Up Next", value=next_song_field, inline=False)
 
             embed.clear_fields()
-            embed.add_field(
-                name="Up Next", value=next_song_field, inline=False)
             embed.add_field(
                 name="Progress",
                 value=f"[{format_time(elapsed_time)}] {progress_bar} {format_time(duration)}",
@@ -170,35 +171,34 @@ class MusicPlayer:
                 if not media_url:
                     raise ValueError("Failed to extract media URL")
 
-                conn = sqlite3.connect(self.bot.data_dir / 'server_stats.db')
-                cursor = conn.cursor()
+                with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
+                    cursor = conn.cursor()
 
-                song_title = info['title']
-                similar_title = find_similar_song_title(cursor, song_title)
+                    song_title = info['title']
+                    similar_title = find_similar_song_title(cursor, song_title)
 
-                if similar_title:
-                    song_title = similar_title
+                    if similar_title:
+                        song_title = similar_title
 
-                cursor.execute('''
-                    INSERT INTO user_actions (user_id, user_name, song_title, song_url, playback_speed, duration, action)
-                    VALUES (?, ?, ?, ?, ?, ?, 'request')
-                ''', (str(ctx.author.id), ctx.author.display_name, song_title, info['webpage_url'], playback_speed, info['duration']))
+                    cursor.execute('''
+                        INSERT INTO user_actions (user_id, user_name, song_title, song_url, playback_speed, duration, action)
+                        VALUES (?, ?, ?, ?, ?, ?, 'request')
+                    ''', (str(ctx.author.id), ctx.author.display_name, song_title, info['webpage_url'], playback_speed, info['duration']))
 
-                conn.commit()
-                conn.close()
+                    conn.commit()
 
-                thumbnail_url = info['thumbnail']
-                self.current_video_info = info
-                self.current_song_url = self.current_video_info['webpage_url']
-                await self.create_player_embed(ctx, info['webpage_url'], info['title'], playback_speed, thumbnail_url)
+                    thumbnail_url = info['thumbnail']
+                    self.current_video_info = info
+                    self.current_song_url = self.current_video_info['webpage_url']
+                    await self.create_player_embed(ctx, info['webpage_url'], info['title'], playback_speed, thumbnail_url)
 
-                ffmpeg_options = self._get_ffmpeg_options(playback_speed)
-                source = discord.FFmpegPCMAudio(
-                    media_url, executable=self.bot.ffmpeg_path, **ffmpeg_options)
-                voice_client.play(discord.PCMVolumeTransformer(
-                    source, volume=volume), after=lambda e: self._after_play(ctx))
+                    ffmpeg_options = self._get_ffmpeg_options(playback_speed)
+                    source = discord.FFmpegPCMAudio(
+                        media_url, executable=self.bot.ffmpeg_path, **ffmpeg_options)
+                    voice_client.play(discord.PCMVolumeTransformer(
+                        source, volume=volume), after=lambda e: self._after_play(ctx))
 
-                await self.update_progress_bar(voice_client, info, playback_speed, ctx.author, thumbnail_url)
+                    await self.update_progress_bar(voice_client, info, playback_speed, ctx.author, thumbnail_url)
 
         except Exception as e:
             log_error(self.bot, f"Error playing audio: {e}")

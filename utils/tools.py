@@ -1,7 +1,9 @@
 from datetime import datetime
 import json
 import traceback
-from typing import TYPE_CHECKING
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING, Any, Callable
 
 import discord
 
@@ -231,3 +233,10 @@ def create_embed(title: str, description: str, color: discord.Color, thumbnail: 
     embed.set_footer(text="  yobot | " +
                      datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + " UTC")
     return embed
+
+
+def format_time(seconds):
+    """Formats time in mm:ss format."""
+    minutes = seconds // 60
+    seconds = seconds % 60
+    return f"{int(minutes):02}:{int(seconds):02}"
