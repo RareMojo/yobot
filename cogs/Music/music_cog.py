@@ -4,7 +4,7 @@ import sqlite3
 from discord.ext import commands
 from cogs.Music.music_player import MusicPlayer
 from utils.logger import log_debug, log_error
-from utils.tools import update_config, create_embed, idle_disconnect, join_voice_channel
+from utils.tools import update_config, create_embed, join_voice_channel
 from datetime import datetime
 from random import shuffle
 
