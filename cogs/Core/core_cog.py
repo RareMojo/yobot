@@ -1,43 +1,48 @@
-from discord.ext import commands
 import discord
-from discord import Forbidden, HTTPException
-from utils.tools import update_with_discord, welcome_to_bot
-from utils.logger import log_debug, log_error, log_info
 import sqlite3
+from discord.ext import commands
+from discord import Forbidden, HTTPException
+from utils.tools import update_with_discord, welcome_to_bot, generate_bar_chart, generate_pie_chart
+from utils.logger import log_debug, log_error, log_info
 from datetime import datetime, timedelta
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from discord_bot.bot import Bot
 
 
 class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bot."):
 
-    def __init__(self, bot: "Bot"):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.initialize_core_db()
+        self._initialize_core_db()
 
-    def initialize_core_db(self):
+    def _initialize_core_db(self):
         """Initialize the SQLite database and create the required tables."""
         with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
             cursor = conn.cursor()
 
-            # idk some foreign key support
+            # some foreign key support
             cursor.execute('PRAGMA foreign_keys = ON;')
 
-            # commands tracking table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS command_usage (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    command_name TEXT NOT NULL,
-                    user_id TEXT NOT NULL,
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
                     user_name TEXT NOT NULL,
+                    command_name TEXT NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
 
+            cursor.execute(
+                'CREATE INDEX IF NOT EXISTS idx_command_usage_guild_id ON command_usage (guild_id);')
+
             conn.commit()
+
+    @commands.Cog.listener()
+    async def on_command_error(ctx, error):
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.send(f"This command is on cooldown. Try again in {round(error.retry_after, 2)} seconds.")
+        else:
+            raise error # re-raise the error so it can be logged
 
     @commands.Cog.listener()
     async def on_connect(self):
@@ -45,7 +50,7 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
             await update_with_discord(self.bot)
             log_debug(self.bot, "Bot connected to Discord.")
         except Exception as e:
-            log_error(self.bot, f"Error updating Bot: {e}")
+            log_error(self.bot, f"Error updating Bot: {str(e)}")
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -53,7 +58,7 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
             await welcome_to_bot(self.bot)
             await self.bot.start_terminal_command_loop()
         except Exception as e:
-            log_error(self.bot, f"Error welcoming Bot: {e}")
+            log_error(self.bot, f"Error welcoming Bot: {str(e)}")
 
     @commands.Cog.listener()
     async def block_dms(self, ctx: commands.Context) -> bool:
@@ -112,7 +117,7 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
             log_debug(self.bot, "User or server has DMs disabled.")
 
     @commands.hybrid_command(name="prune", description="Delete a specified number of the bot's messages, except for certain command responses.")
-    @commands.has_permissions(manage_messages=True)
+    @commands.has_guild_permissions(manage_messages=True)
     async def prune(self, ctx: commands.Context, amount: int):
         """Deletes a specified number of the bot's own messages in the current channel, excluding certain command replies."""
         await ctx.send("Deleting messages...", delete_after=5)
@@ -162,204 +167,134 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
                 self.bot, "Bot doesn't have permission to delete message in this channel.")
         except Exception as e:
             await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(self.bot, f"Error in prune: {e}")
+            log_error(self.bot, f"Error in prune: {str(e)}")
 
     @commands.Cog.listener()
     async def on_command(self, ctx: commands.Context):
         """Log command usage when any command is invoked."""
         command_name = ctx.command.name if ctx.command else "unknown"
-        user_id = str(ctx.author.id)
+        user_id = ctx.author.id
         user_name = ctx.author.display_name
+        guild_id = ctx.guild.id if ctx.guild else "DM"
 
-        # log command usage
         with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
             cursor = conn.cursor()
 
             cursor.execute('''
-                INSERT INTO command_usage (command_name, user_id, user_name)
-                VALUES (?, ?, ?)
-            ''', (command_name, user_id, user_name))
+                INSERT INTO command_usage (guild_id, command_name, user_id, user_name)
+                VALUES (?, ?, ?, ?)
+            ''', (guild_id, command_name, user_id, user_name))
 
-        conn.commit()
+            conn.commit()
 
-    @commands.hybrid_command(name="commandstats", help="Show how often commands have been executed.")
-    async def command_stats(self, ctx):
-        """Show how often each command has been requested."""
+    @commands.hybrid_command(
+        name="commandstats",
+        help="timeframe: all/today/week/month | group: command/hour/day | command_name: command | chart: bar/pie"
+    )
+    @commands.has_guild_permissions(manage_messages=True)
+    async def command_stats(self, ctx, timeframe: str = "all", user: discord.User = None, command_name: str = None, chart: str = None, group: str = "command"):
+        """
+        Consolidated command to show command usage stats based on timeframe, user, command_name, or chart.
+        """
+        valid_timeframes = ["all", "today", "week", "month"]
+        valid_charts = ["bar", "pie", None]
+        valid_groups = ["command", "hour", "day"]
+
+        if timeframe not in valid_timeframes:
+            await ctx.send(f"Invalid timeframe: {timeframe}. Valid options are: 'all', 'today', 'week', 'month'.", delete_after=12)
+            return
+
+        if chart not in valid_charts:
+            await ctx.send(f"Invalid chart type: {chart}. Valid options are: 'bar', 'pie'.", delete_after=12)
+            return
+
+        if group not in valid_groups:
+            await ctx.send(f"Invalid group: {group}. Valid options are: 'command', 'hour', 'day'.", delete_after=12)
+            return
+
         try:
             with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
                 cursor = conn.cursor()
 
-                cursor.execute('''
-                    SELECT command_name, COUNT(*) AS count 
-                    FROM command_usage
-                    GROUP BY command_name
-                    ORDER BY count DESC
-                ''')
+                params = [ctx.guild.id]
+                if group == 'command':
+                    select_clause = "SELECT command_name, COUNT(*) AS count"
+                    group_clause = "GROUP BY command_name"
+                elif group == 'hour':
+                    select_clause = "SELECT strftime('%H', timestamp) as hour, COUNT(*) AS count"
+                    group_clause = "GROUP BY hour"
+                elif group == 'day':
+                    select_clause = "SELECT strftime('%w', timestamp) as day_of_week, COUNT(*) AS count"
+                    group_clause = "GROUP BY day_of_week"
+
+                query = f"{select_clause} FROM command_usage WHERE guild_id = ?"
+
+                if timeframe == "today":
+                    query += " AND DATE(timestamp) = DATE('now')"
+                elif timeframe == "week":
+                    query += " AND timestamp >= DATE('now', '-7 days')"
+                elif timeframe == "month":
+                    query += " AND timestamp >= DATE('now', '-30 days')"
+
+                if user:
+                    query += " AND user_id = ?"
+                    params.append(str(user.id))
+
+                if command_name:
+                    query += " AND command_name = ?"
+                    params.append(command_name)
+
+                query += f" {group_clause} ORDER BY count DESC"
+
+                cursor.execute(query, params)
                 results = cursor.fetchall()
 
                 if results:
-                    embed = discord.Embed(
-                        title="Command Usage Statistics", color=discord.Color.green())
-                    for command_name, count in results:
-                        embed.add_field(name=command_name,
-                                        value=f"{count} times", inline=False)
-                    await ctx.send(embed=embed)
+                    if chart == "bar":
+                        title = f"Command Usage Stats by {group.title()} ({timeframe})"
+                        xlabel = group.title()
+                        ylabel = "Usage Count"
+                        await generate_bar_chart(ctx, results, title=title, xlabel=xlabel, ylabel=ylabel, group=group)
+                    elif chart == "pie":
+                        title = f"Command Usage Distribution by {group.title()} ({timeframe})"
+                        await generate_pie_chart(ctx, results, title=title, group=group)
+                    else:
+                        await self._send_text_stats(ctx, results, timeframe, user, command_name, group)
                 else:
-                    await ctx.send("No command usage data available.")
+                    await ctx.send(f"No command usage data available for the selected filters.")
 
         except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
+            await ctx.send(f"An error occurred with the database:\n{str(e)}")
             log_error(
                 self.bot, f"Database error in command {ctx.command}: {str(e)}")
-        except Exception as e:
-            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(
-                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
 
-    @commands.hybrid_command(name="commandstatsweek", help="Show detailed stats of commands executed in the past week.")
-    async def command_stats_week(self, ctx):
-        """Show detailed stats of command usage in the past week."""
-        try:
-            one_week_ago = datetime.now() - timedelta(days=7)
+    async def _send_text_stats(self, ctx, results, timeframe, user, command_name, group):
+        """
+        Sends the command usage stats as a text message.
+        """
+        user_info = f" for {user.display_name}" if user else ""
+        command_info = f" for command '{command_name}'" if command_name else ""
+        message = f"**Command Usage Stats by {group.title()} ({timeframe}){user_info}{command_info}:**\n"
 
-            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as con:
-                cursor = conn.cursor()
+        if group == 'command':
+            for command_name, count in results:
+                message += f"- `{command_name}`: {count} uses\n"
+        elif group == 'hour':
+            for hour, count in results:
+                message += f"- Hour {hour}: {count} uses\n"
+        elif group == 'day':
+            day_mapping = ['Sunday', 'Monday', 'Tuesday',
+                           'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            for day_of_week, count in results:
+                day_name = day_mapping[int(day_of_week)]
+                message += f"- {day_name}: {count} uses\n"
 
-                cursor.execute('''
-                    SELECT command_name, COUNT(*) AS count
-                    FROM command_usage
-                    WHERE timestamp >= ?
-                    GROUP BY command_name
-                    ORDER BY count DESC
-                ''', (one_week_ago,))
-
-                results = cursor.fetchall()
-
-                if results:
-                    embed = discord.Embed(
-                        title="Command Usage in the Past Week",
-                        description="Here’s a breakdown of the most used commands in the past 7 days:",
-                        color=discord.Color.blue()
-                    )
-
-                    for command_name, count in results:
-                        embed.add_field(name=command_name,
-                                        value=f"{count} times", inline=False)
-
-                    await ctx.send(embed=embed)
-
-                else:
-                    await ctx.send("No command usage data available for the past week.")
-
-        except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(
-                self.bot, f"Database error in command {ctx.command}: {str(e)}")
-        except Exception as e:
-            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(
-                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
-
-    @commands.hybrid_command(name="usercommandstatsweek", help="Show command usage stats for a specific user over the past week.")
-    async def user_command_stats_week(self, ctx, user: discord.User = None):
-        """Show the command usage stats for a specific user over the past week."""
-        try:
-            if user is None:
-                user = ctx.author
-
-            user_id = str(user.id)
-
-            one_week_ago = datetime.now() - timedelta(days=7)
-
-            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as con:
-                cursor = conn.cursor()
-
-                cursor.execute('''
-                    SELECT command_name, COUNT(*) AS count
-                    FROM command_usage
-                    WHERE user_id = ? AND timestamp >= ?
-                    GROUP BY command_name
-                    ORDER BY count DESC
-                ''', (user_id, one_week_ago))
-
-                results = cursor.fetchall()
-
-                if results:
-                    embed = discord.Embed(
-                        title=f"Command Usage for {user.display_name} (Past Week)",
-                        description=f"Here’s a breakdown of the commands used by {user.mention} in the past 7 days:",
-                        color=discord.Color.blue()
-                    )
-
-                    for command_name, count in results:
-                        embed.add_field(name=command_name,
-                                        value=f"{count} times", inline=False)
-
-                    await ctx.send(embed=embed)
-
-                else:
-                    await ctx.send(f"No command usage data available for {user.mention} in the past week.")
-
-        except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(
-                self.bot, f"Database error in command {ctx.command}: {str(e)}")
-        except Exception as e:
-            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(
-                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
-
-    @commands.hybrid_command(name="usercommandstats", help="Show all-time command usage stats for a specific user or yourself.")
-    async def user_command_stats(self, ctx, user: discord.User = None):
-        """Show all-time command usage statistics for a specific user or yourself."""
-        try:
-            if user is None:
-                user = ctx.author
-
-            user_id = str(user.id)
-
-            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as con:
-                cursor = conn.cursor()
-
-                cursor.execute('''
-                    SELECT command_name, COUNT(*) AS count
-                    FROM command_usage
-                    WHERE user_id = ?
-                    GROUP BY command_name
-                    ORDER BY count DESC
-                ''', (user_id,))
-
-                results = cursor.fetchall()
-
-                if results:
-                    embed = discord.Embed(
-                        title=f"All-Time Command Usage for {user.display_name}",
-                        description=f"Here’s a breakdown of all-time command usage by {user.mention}:",
-                        color=discord.Color.green()
-                    )
-
-                    for command_name, count in results:
-                        embed.add_field(name=command_name,
-                                        value=f"{count} times", inline=False)
-
-                    await ctx.send(embed=embed)
-
-                else:
-                    await ctx.send(f"No command usage data available for {user.mention}.")
-
-        except sqlite3.Error as e:
-            await ctx.send(f"An error occurred with the database:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(
-                self.bot, f"Database error in command {ctx.command}: {str(e)}")
-        except Exception as e:
-            await ctx.send(f"An unexpected error occurred:\n{str(e)}\n\nReport this to your server admin if you think this is a bug.")
-            log_error(
-                self.bot, f"Unexpected error in command {ctx.command}: {str(e)}")
+        await ctx.send(message)
 
 
-async def setup(bot: "Bot"):
+async def setup(bot: commands.Bot):
     try:
         await bot.add_cog(CoreCog(bot))
         log_debug(bot, "CoreCog loaded.")
     except Exception as e:
-        log_error(bot, f"Error loading CoreCog: {e}")
+        log_error(bot, f"Error loading CoreCog: {str(e)}")

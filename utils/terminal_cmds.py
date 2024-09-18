@@ -1,19 +1,13 @@
 import json
 import logging
 import traceback
-from typing import TYPE_CHECKING
-
 import discord
-
+from discord.ext import commands
 from utils.tools import get_boolean_input, update_config
-
-if TYPE_CHECKING:
-    from discord_bot.bot import Bot
 
 
 # Terminal Commands Functions
-
-def toggle_debug_mode(bot: "Bot") -> None:
+def toggle_debug_mode(bot: commands.Bot) -> None:
     """
     Toggles debug mode.
     Args:
@@ -39,7 +33,7 @@ def toggle_debug_mode(bot: "Bot") -> None:
                 update_config(config_file, new_data)
 
             except Exception as e:
-                bot.log.debug(f"Failed to update the configuration file: {e}")
+                bot.log.debug(f"Failed to update the configuration file: {str(e)}")
                 return bot.log.warning("Failed to disable debug mode.")
 
             bot.log.info("Restarting to apply changes...")
@@ -52,7 +46,7 @@ def toggle_debug_mode(bot: "Bot") -> None:
                 update_config(config_file, new_data)
 
             except Exception as e:
-                bot.log.debug(f"Failed to update the configuration file: {e}")
+                bot.log.debug(f"Failed to update the configuration file: {str(e)}")
                 return bot.log.warning("Failed to enable debug mode.")
 
             bot.log.setLevel(logging.DEBUG)
@@ -66,12 +60,12 @@ def toggle_debug_mode(bot: "Bot") -> None:
     except KeyError:
         bot.log.warning(f"Key not found in config file {bot.config}.")
     except Exception as e:
-        bot.log.warning(f"An error occurred while toggling debug mode: {e}")
+        bot.log.warning(f"An error occurred while toggling debug mode: {str(e)}")
     else:
         bot.log.debug("Debug mode toggled successfully.")
 
 
-def wipe_config(bot: "Bot") -> None:
+def wipe_config(bot: commands.Bot) -> None:
     """
     Wipes the config file and shuts down the bot.
     Args:
@@ -108,12 +102,12 @@ def wipe_config(bot: "Bot") -> None:
             bot.log.info("Config file not wiped.")
 
     except FileNotFoundError as e:
-        bot.log.debug(f"Config file not found: {e}")
+        bot.log.debug(f"Config file not found: {str(e)}")
     except Exception as e:
-        bot.log.error(f"An error occurred while wiping the config file: {e}")
+        bot.log.error(f"An error occurred while wiping the config file: {str(e)}")
 
 
-def exit_bot_terminal(bot: "Bot") -> None:
+def exit_bot_terminal(bot: commands.Bot) -> None:
     """
     Shuts down the bot.
     Args:
@@ -127,10 +121,10 @@ def exit_bot_terminal(bot: "Bot") -> None:
         bot.log.debug("Shutting down Bot...")
         bot.stop_bot()
     except Exception as e:
-        bot.log.error(f"Error shutting down Bot: {e}")
+        bot.log.error(f"Error shutting down Bot: {str(e)}")
 
 
-async def set_bot_name(bot: "Bot") -> None:
+async def set_bot_name(bot: commands.Bot) -> None:
     """
     Sets the bot name.
     Args:
@@ -178,7 +172,7 @@ async def set_bot_name(bot: "Bot") -> None:
         traceback.print_exc()
 
 
-async def set_bot_avatar(bot: "Bot") -> None:
+async def set_bot_avatar(bot: commands.Bot) -> None:
     """
     Sets the bot avatar.
     Args:
@@ -218,7 +212,7 @@ async def set_bot_avatar(bot: "Bot") -> None:
                     update_config(config_file, new_data)
                 except Exception as e:
                     bot.log.debug(
-                        f"Failed to update the configuration file: {e}")
+                        f"Failed to update the configuration file: {str(e)}")
                     return bot.log.warning("Failed to set update flag.")
 
             if successful == True:
@@ -230,7 +224,7 @@ async def set_bot_avatar(bot: "Bot") -> None:
         bot.log.error("Error: {}".format(e))
 
 
-async def set_bot_presence(bot: "Bot") -> None:
+async def set_bot_presence(bot: commands.Bot) -> None:
     """
     Sets the bot presence.
     Args:
@@ -258,7 +252,7 @@ async def set_bot_presence(bot: "Bot") -> None:
                 update_config(config_file, new_data)
 
             except Exception as e:
-                bot.log.debug(f"Failed to update the configuration file: {e}")
+                bot.log.debug(f"Failed to update the configuration file: {str(e)}")
                 return bot.log.warning("Failed to set update flag.")
 
             try:
@@ -277,10 +271,10 @@ async def set_bot_presence(bot: "Bot") -> None:
 
     except Exception as e:
         bot.log.debug(f"Error in set_bot_presence: {traceback.format_exc()}")
-        bot.log.error(f"Error in set_bot_presence: {e}")
+        bot.log.error(f"Error in set_bot_presence: {str(e)}")
 
 
-async def sync_commands(bot: "Bot") -> None:
+async def sync_commands(bot: commands.Bot) -> None:
     """
     Synchronizes commands with Discord.
     Args:
@@ -309,11 +303,11 @@ async def sync_commands(bot: "Bot") -> None:
             bot.log.info("Commands not synchronized.")
 
     except Exception as e:
-        bot.log.error(f"Error in sync_commands: {e}")
+        bot.log.error(f"Error in sync_commands: {str(e)}")
         bot.log.error("Commands not synchronized.")
 
 
-async def set_owner(bot: "Bot") -> None:
+async def set_owner(bot: commands.Bot) -> None:
     """
     Sets the owner of the bot.
     Args:
@@ -347,7 +341,7 @@ async def set_owner(bot: "Bot") -> None:
                 update_config(config_file, new_data)
 
             except Exception as e:
-                bot.log.debug(f"Failed to update the configuration file: {e}")
+                bot.log.debug(f"Failed to update the configuration file: {str(e)}")
                 return bot.log.warning("Failed to set update flag.")
 
             bot.log.info(
@@ -359,10 +353,10 @@ async def set_owner(bot: "Bot") -> None:
             bot.log.info("Owner not changed.")
 
     except Exception as e:
-        bot.log.error(f"Error in set_owner function: {e}")
+        bot.log.error(f"Error in set_owner function: {str(e)}")
 
 
-def show_help(bot: "Bot") -> None:
+def show_help(bot: commands.Bot) -> None:
     """
     Displays a list of available commands.
     Args:
@@ -417,11 +411,11 @@ def show_help(bot: "Bot") -> None:
         bot.log.debug("Exiting show_help function...")
 
     except Exception as e:
-        bot.log.error(f"Error in show_help function: {e}")
+        bot.log.error(f"Error in show_help function: {str(e)}")
         traceback.print_exc()
 
 
-def show_aliases(bot: "Bot") -> None:
+def show_aliases(bot: commands.Bot) -> None:
     """
     Prints a list of command aliases.
     Args:
@@ -469,11 +463,11 @@ def show_aliases(bot: "Bot") -> None:
         bot.log.debug("Exiting show_aliases function...")
 
     except Exception as e:
-        bot.log.error(f"Error in show_aliases function: {e}")
+        bot.log.error(f"Error in show_aliases function: {str(e)}")
         traceback.print_exc()
 
 
-def ping(bot: "Bot") -> None:
+def ping(bot: commands.Bot) -> None:
     """
     Prints 'Pong!' to the console.
     Args:
@@ -487,4 +481,4 @@ def ping(bot: "Bot") -> None:
     try:
         bot.log.info("Pong!")
     except Exception as e:
-        bot.log.error(f"Error in ping function: {e}")
+        bot.log.error(f"Error in ping function: {str(e)}")

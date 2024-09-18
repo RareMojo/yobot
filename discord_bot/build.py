@@ -1,9 +1,7 @@
 import json
 import os
 from pathlib import Path
-
 from discord import Intents
-
 from discord_bot.bot import Bot
 from utils.logger import Logger
 from utils.tools import get_new_config

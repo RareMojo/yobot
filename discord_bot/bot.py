@@ -1,21 +1,13 @@
 import asyncio
 import json
 import os
-from typing import TYPE_CHECKING
-
 from discord.ext import commands
 from dotenv import load_dotenv
-
 from discord_bot.terminal import terminal_command_loop
 
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-
-if TYPE_CHECKING:
-    from discord import Intents
-    from utils.logger import Logger
-
 
 class Bot(commands.Bot):
     """Main Bot class that handles the bot's initialization and startup.
@@ -74,7 +66,7 @@ class Bot(commands.Bot):
                 await asyncio.sleep(2)
 
         except Exception as e:
-            self.log.error(f"Bot encountered an error: {e}")
+            self.log.error(f"Bot encountered an error: {str(e)}")
 
         finally:
             bot_task.cancel()
@@ -91,7 +83,7 @@ class Bot(commands.Bot):
                 await asyncio.sleep(3)
 
         except Exception as e:
-            self.log.error(f"Terminal encountered an error: {e}")
+            self.log.error(f"Terminal encountered an error: {str(e)}")
 
         finally:
             terminal_task.cancel()

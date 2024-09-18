@@ -1,17 +1,13 @@
 import asyncio
-from typing import TYPE_CHECKING
-
+from discord.ext import commands
 from utils.terminal_cmds import (exit_bot_terminal, ping, set_bot_avatar,
                                  set_bot_name, set_bot_presence,
                                  set_owner, show_aliases,
                                  show_help, sync_commands,
                                  toggle_debug_mode, wipe_config)
 
-if TYPE_CHECKING:
-    from discord_bot.bot import Bot
 
-
-async def terminal_command_loop(bot: "Bot"):
+async def terminal_command_loop(bot: commands.Bot):
     """
     Runs a loop to handle terminal commands.
     Args:
@@ -54,7 +50,7 @@ class TerminalCommands:
       terminal_command (str): The terminal command to handle.
     """
 
-    def __init__(self, bot: "Bot", terminal_command: str):
+    def __init__(self, bot: commands.Bot, terminal_command: str):
         """
         Initializes the TerminalCommands class.
         Args:

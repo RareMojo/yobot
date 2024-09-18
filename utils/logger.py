@@ -2,12 +2,9 @@
 import logging
 import os
 import re
+from discord.ext import commands
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from discord_bot.bot import Bot
 
 
 class Logger(logging.Logger):
@@ -205,7 +202,7 @@ class LoggerRotator(RotatingFileHandler):
             self.handleError(record)
 
 
-def log_debug(bot: "Bot", message: str) -> None:
+def log_debug(bot: commands.Bot, message: str) -> None:
     """
     Logs a debug message.
     Args:
@@ -220,7 +217,7 @@ def log_debug(bot: "Bot", message: str) -> None:
     bot.log.debug(message)
 
 
-def log_error(bot: "Bot", message: str) -> None:
+def log_error(bot: commands.Bot, message: str) -> None:
     """
     Logs an error message.
     Args:
@@ -235,7 +232,7 @@ def log_error(bot: "Bot", message: str) -> None:
     bot.log.error(message)
 
 
-def log_warning(bot: "Bot", message: str) -> None:
+def log_warning(bot: commands.Bot, message: str) -> None:
     """
     Logs a warning message.
     Args:
@@ -250,7 +247,7 @@ def log_warning(bot: "Bot", message: str) -> None:
     bot.log.warning(message)
 
 
-def log_info(bot: "Bot", message: str) -> None:
+def log_info(bot: commands.Bot, message: str) -> None:
     """
     Logs an info message.
     Args:
