@@ -30,13 +30,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
 
             # music tracking table
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_actions (
+                CREATE TABLE IF NOT EXISTS music_actions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     guild_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     user_name TEXT NOT NULL,
-                    song_title TEXT NOT NULL,
-                    song_url TEXT NOT NULL,
+                    media_title TEXT NOT NULL,
+                    media_url TEXT NOT NULL,
                     genre TEXT NOT NULL,
                     playback_speed REAL,
                     duration REAL,
@@ -46,11 +46,11 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
             ''')
 
             cursor.execute(
-                'CREATE INDEX IF NOT EXISTS idx_user_actions_guild_action ON user_actions (guild_id, action);')
+                'CREATE INDEX IF NOT EXISTS idx_music_actions_guild_action ON music_actions (guild_id, action);')
             cursor.execute(
-                'CREATE INDEX IF NOT EXISTS idx_user_actions_guild_action_timestamp ON user_actions (guild_id, action, timestamp);')
+                'CREATE INDEX IF NOT EXISTS idx_music_actions_guild_action_timestamp ON music_actions (guild_id, action, timestamp);')
             cursor.execute(
-                'CREATE INDEX IF NOT EXISTS idx_user_actions_guild_user ON user_actions (guild_id, user_id);')
+                'CREATE INDEX IF NOT EXISTS idx_music_actions_guild_user ON music_actions (guild_id, user_id);')
 
             conn.commit()
 
@@ -75,7 +75,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
             try:
                 await self.player.play_youtube_audio(ctx, voice_client, song, volume=self.music_volume / 100)
                 if not voice_client.is_playing() and not self.player.queue:
-                    self.bot.loop.create_task(idle_disconnect(self.bot, ctx, self.player))
+                    self.bot.loop.create_task(self.idle_disconnect(ctx))
             except Exception as e:
                 await ctx.send(f"Error playing {song}:\n\nReport this to your server admin if you think this is a bug.")
                 log_error(self.bot, f"Error playing {song}: `{str(e)}`")
@@ -114,8 +114,8 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 cursor = conn.cursor()
 
                 cursor.execute('''
-                    SELECT song_title, song_url, playback_speed, user_name
-                    FROM user_actions 
+                    SELECT media_title, media_url, playback_speed, user_name
+                    FROM music_actions 
                     WHERE action = 'request' AND guild_id = ?
                     ORDER BY timestamp DESC 
                     LIMIT 1
@@ -127,26 +127,26 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     await ctx.send("No songs have been requested yet!", delete_after=12)
                     return
 
-                song_title, song_url, playback_speed, user_name = recent_song
+                media_title, media_url, playback_speed, user_name = recent_song
                 playback_speed = playback_speed or 1.0
 
                 voice_client = await join_voice_channel(self.bot, ctx, self.music_channel_ids)
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded the most recent song to the queue:\n{song_title} requested by {user_name} (at speed {playback_speed}x)")
+                await ctx.send(f":notes: **Song Requested**\nAdded the most recent song to the queue:\n{media_title} requested by {user_name} (at speed {playback_speed}x)")
 
                 if self.player.is_playing:
-                    self.player.queue.append((song_url, playback_speed))
+                    self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, song_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
-                        self.bot.loop.create_task(
-                            idle_disconnect(self.bot, ctx, self.player))
+                        self.bot.loop.create_task(self.idle_disconnect(ctx))
         except sqlite3.Error as e:
             await ctx.send(f"Error playing the most recent song:\n\nReport this to your server admin if you think this is a bug.")
-            log_error(self.bot, f"Error playing the most recent song: {str(e)}")
+            log_error(
+                self.bot, f"Error playing the most recent song: {str(e)}")
             self.player.is_playing = False
 
     @commands.hybrid_command(name="slowplay", help="Plays a song at 0.75x speed.")
@@ -179,10 +179,11 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 await self.player.play_youtube_audio(ctx, voice_client, song, playback_speed=speed, volume=self.music_volume / 100)
                 # start the idle disconnect task
                 if not voice_client.is_playing() and not self.player.queue:
-                    self.bot.loop.create_task(idle_disconnect(self.bot, ctx, self.player))
+                    self.bot.loop.create_task(self.idle_disconnect(ctx))
         except Exception as e:
             await ctx.send(f"Error playing {song} at {label} speed:\n\nReport this to your server admin if you think this is a bug.")
-            log_error(self.bot, f"Error playing {song} at {label} speed: {str(e)}")
+            log_error(
+                self.bot, f"Error playing {song} at {label} speed: {str(e)}")
             self.player.is_playing = False
 
     @commands.hybrid_command(name="stop", help="Stops the audio and clears the queue.")
@@ -229,13 +230,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 cursor = conn.cursor()
 
                 try:
-                    song_url = self.player.current_song_url
+                    media_url = self.player.current_media_url
 
                     # Track the skip here
                     cursor.execute(
-                        'INSERT INTO user_actions (guild_id, user_id, user_name, song_title, song_url, action) VALUES (?, ?, ?, ?, ?, ?)',
+                        'INSERT INTO music_actions (guild_id, user_id, user_name, media_title, media_url, action) VALUES (?, ?, ?, ?, ?, ?)',
                         (ctx.guild.id, ctx.author.id, ctx.author.display_name,
-                         self.player.current_video_info['title'], song_url, 'skip')
+                         self.player.current_video_info['title'], media_url, 'skip')
                     )
                     conn.commit()
 
@@ -404,13 +405,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     cursor = conn.cursor()
 
                     try:
-                        song_url = self.player.current_song_url
+                        media_url = self.player.current_media_url
 
                         # Track the skip here
                         cursor.execute(
-                            'INSERT INTO user_actions (guild_id, user_id, user_name, song_title, song_url, action) VALUES (?, ?, ?, ?, ?, ?)',
+                            'INSERT INTO music_actions (guild_id, user_id, user_name, media_title, media_url, action) VALUES (?, ?, ?, ?, ?, ?)',
                             message.guild.id, user.id, user.display_name,
-                             self.player.current_video_info['title'], song_url, 'skip')
+                            self.player.current_video_info['title'], media_url, 'skip')
 
                         conn.commit()
 
@@ -425,11 +426,11 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 conn.execute('PRAGMA foreign_keys = ON;')
                 cursor = conn.cursor()
                 try:
-                    song_url = self.player.current_song_url
+                    media_url = self.player.current_media_url
                     cursor.execute(
-                        'INSERT INTO user_actions (guild_id, user_id, user_name, song_title, song_url, action) VALUES (?, ?, ?, ?, ?, ?)',
+                        'INSERT INTO music_actions (guild_id, user_id, user_name, media_title, media_url, action) VALUES (?, ?, ?, ?, ?, ?)',
                         message.guild.id, user.id, user.display_name,
-                         self.player.current_video_info['title'], song_url, 'like')
+                        self.player.current_video_info['title'], media_url, 'like')
 
                     conn.commit()
                     await message.channel.send(f"❤️ **{user.name}** liked the song.", delete_after=8)
@@ -450,8 +451,8 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 cursor = conn.cursor()
 
                 cursor.execute('''
-                    SELECT song_title, song_url, playback_speed
-                    FROM user_actions 
+                    SELECT media_title, media_url, playback_speed
+                    FROM music_actions 
                     WHERE user_id = ? AND action = 'request' AND guild_id = ?
                     ORDER BY timestamp DESC 
                     LIMIT 1
@@ -463,26 +464,27 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     await ctx.send(f"{user.mention} hasn't requested any songs yet!", delete_after=12)
                     return
 
-                song_title, song_url, playback_speed = recent_song
+                media_title, media_url, playback_speed = recent_song
                 playback_speed = playback_speed or 1.0
 
                 voice_client = await join_voice_channel(self.bot, ctx, self.music_channel_ids)
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded {user.mention}'s most recent song to the queue:\n{song_title} (at speed {playback_speed}x)")
+                await ctx.send(f":notes: **Song Requested**\nAdded {user.mention}'s most recent song to the queue:\n{media_title} (at speed {playback_speed}x)")
 
                 if self.player.is_playing:
-                    self.player.queue.append((song_url, playback_speed))
+                    self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, song_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
         except sqlite3.Error as e:
             await ctx.send(f"Error playing the most recent song.")
-            log_error(self.bot, f"Error playing the most recent song: {str(e)}")
+            log_error(
+                self.bot, f"Error playing the most recent song: {str(e)}")
             self.player.is_playing = False
 
     async def _play_top_song(self, ctx):
@@ -492,10 +494,10 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 cursor = conn.cursor()
 
                 cursor.execute('''
-                    SELECT song_title, song_url, COUNT(*) as request_count 
-                    FROM user_actions 
+                    SELECT media_title, media_url, COUNT(*) as request_count 
+                    FROM music_actions 
                     WHERE action = 'request' AND guild_id = ?
-                    GROUP BY song_title, song_url 
+                    GROUP BY media_title, media_url 
                     ORDER BY request_count DESC 
                     LIMIT 1
                 ''', (ctx.guild.id,))
@@ -505,25 +507,26 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     await ctx.send("No songs have been requested yet.", delete_after=12)
                     return
 
-                song_title, song_url, _ = top_song
+                media_title, media_url, _ = top_song
 
                 voice_client = await join_voice_channel(self.bot, ctx, self.music_channel_ids)
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded the most requested song to the queue:\n{song_title}")
+                await ctx.send(f":notes: **Song Requested**\nAdded the most requested song to the queue:\n{media_title}")
 
                 if self.player.is_playing:
-                    self.player.queue.append((song_url, 1.0))
+                    self.player.queue.append((media_url, 1.0))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, song_url, volume=self.music_volume / 100)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
         except sqlite3.Error as e:
             await ctx.send(f"Error playing the most requested song.")
-            log_error(self.bot, f"Error playing the most requested song: {str(e)}")
+            log_error(
+                self.bot, f"Error playing the most requested song: {str(e)}")
             self.player.is_playing = False
 
     async def _play_top_liked_song(self, ctx):
@@ -533,10 +536,10 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 cursor = conn.cursor()
 
                 cursor.execute('''
-                    SELECT song_title, song_url, COUNT(*) as like_count 
-                    FROM user_actions 
+                    SELECT media_title, media_url, COUNT(*) as like_count 
+                    FROM music_actions 
                     WHERE action = 'like' AND guild_id = ?
-                    GROUP BY song_title, song_url 
+                    GROUP BY media_title, media_url 
                     ORDER BY like_count DESC 
                     LIMIT 1
                 ''', (ctx.guild.id,))
@@ -546,19 +549,19 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     await ctx.send("No songs have been liked yet.", delete_after=12)
                     return
 
-                song_title, song_url, _ = top_liked_song
+                media_title, media_url, _ = top_liked_song
 
                 voice_client = await join_voice_channel(self.bot, ctx, self.music_channel_ids)
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded the most liked song to the queue:\n{song_title}")
+                await ctx.send(f":notes: **Song Requested**\nAdded the most liked song to the queue:\n{media_title}")
 
                 if self.player.is_playing:
-                    self.player.queue.append((song_url, 1.0))
+                    self.player.queue.append((media_url, 1.0))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, song_url, volume=self.music_volume / 100)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
@@ -579,10 +582,10 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 cursor = conn.cursor()
 
                 cursor.execute('''
-                    SELECT song_title, song_url, playback_speed, COUNT(*) as request_count
-                    FROM user_actions 
+                    SELECT media_title, media_url, playback_speed, COUNT(*) as request_count
+                    FROM music_actions 
                     WHERE user_id = ? AND action = 'request' AND guild_id = ?
-                    GROUP BY song_title, song_url, playback_speed
+                    GROUP BY media_title, media_url, playback_speed
                     ORDER BY request_count DESC 
                     LIMIT 1
                 ''', (user_id, ctx.guild.id))
@@ -593,20 +596,20 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     await ctx.send(f"{user.mention} hasn't requested any songs yet!", delete_after=12)
                     return
 
-                song_title, song_url, playback_speed, request_count = favorite_song
+                media_title, media_url, playback_speed, request_count = favorite_song
                 playback_speed = playback_speed or 1.0
 
                 voice_client = await join_voice_channel(self.bot, ctx, self.music_channel_ids)
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded {user.mention}'s favorite song to the queue:\n{song_title} (Requested {request_count} times at speed {playback_speed}x)")
+                await ctx.send(f":notes: **Song Requested**\nAdded {user.mention}'s favorite song to the queue:\n{media_title} (Requested {request_count} times at speed {playback_speed}x)")
 
                 if self.player.is_playing:
-                    self.player.queue.append((song_url, playback_speed))
+                    self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, song_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
@@ -622,10 +625,10 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 cursor = conn.cursor()
 
                 cursor.execute('''
-                    SELECT song_title, song_url, playback_speed, COUNT(*) as request_count 
-                    FROM user_actions 
+                    SELECT media_title, media_url, playback_speed, COUNT(*) as request_count 
+                    FROM music_actions 
                     WHERE action = 'request' AND playback_speed != 1.0 AND guild_id = ?
-                    GROUP BY song_title, song_url, playback_speed 
+                    GROUP BY media_title, media_url, playback_speed 
                     ORDER BY request_count DESC 
                     LIMIT 1
                 ''', (ctx.guild.id,))
@@ -635,19 +638,19 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     await ctx.send("No songs with speed changes have been requested yet.", delete_after=12)
                     return
 
-                song_title, song_url, playback_speed, _ = top_speed_song
+                media_title, media_url, playback_speed, _ = top_speed_song
 
                 voice_client = await join_voice_channel(self.bot, ctx, self.music_channel_ids)
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded song with the most speed changes to queue:\n{song_title} at speed {playback_speed}x")
+                await ctx.send(f":notes: **Song Requested**\nAdded song with the most speed changes to queue:\n{media_title} at speed {playback_speed}x")
 
                 if self.player.is_playing:
-                    self.player.queue.append((song_url, playback_speed))
+                    self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, song_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
@@ -656,7 +659,6 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
             log_error(
                 self.bot, f"Error playing the most requested song with a speed change: {str(e)}")
             self.player.is_playing = False
-
 
     async def idle_disconnect(self, ctx):
         """
@@ -668,11 +670,11 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
         Returns:
             None
         Examples:
-            >>> await idle_disconnect(bot, ctx, player)
+            >>> await self.idle_disconnect(ctx)
         """
         for _ in range(30):
             voice_client = discord.utils.get(
-                bot.voice_clients, guild=ctx.guild)
+                self.bot.voice_clients, guild=ctx.guild)
             if voice_client is None or voice_client.is_playing() or self.player.queue:
                 return
             await asyncio.sleep(10)
@@ -684,7 +686,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 await ctx.send("I haven't played anything in awhile.\nI'll leave for now, use one of the play commands to bring me back!", delete_after=12)
                 await voice_client.disconnect()
             except Exception as e:
-                log_error(bot, f"Error disconnecting from voice: {str(e)}")
+                log_error(self.bot, f"Error disconnecting from voice: {str(e)}")
 
 
 async def setup(bot: commands.Bot):

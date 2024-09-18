@@ -47,7 +47,6 @@ class Bot(commands.Bot):
             self.config = json.load(f)
 
         self.display_name = self.config.get("bot_name")
-        self.ffmpeg_path = self.config.get("ffmpeg")
 
         super().__init__(command_prefix=self.config.get("prefix"), intents=intents)
         self.log.debug("Bot initialized.")

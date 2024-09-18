@@ -5,9 +5,9 @@ import asyncio
 import time
 import re
 import os
+import sys
 from utils.tools import format_time, generate_progress_bar
 from utils.logger import log_error, log_debug
-
 
 
 class MusicPlayer:
@@ -17,7 +17,12 @@ class MusicPlayer:
         self.current_video_info = current_video_info
         self.player_message = player_message
         self.is_playing = False
-        self.current_song_url = None
+        self.current_media_url = None
+        self.max_media_duration = self.bot.config.get("max_media_duration")
+        if sys.platform == 'win32':
+            self.ffmpeg_path = 'ffmpeg.exe'
+        elif sys.platform == 'linux':
+            self.ffmpeg_path = 'ffmpeg'
 
     async def create_player_embed(self, ctx, url, title, playback_speed=1.0, thumbnail='https://i.imgur.com/tSuXN8P.png'):
         """Creates or updates the player embed."""
@@ -108,12 +113,12 @@ class MusicPlayer:
             if elapsed_time >= duration:
                 break
 
-    async def play_youtube_audio(self, ctx, voice_client, video_url=None, playback_speed=1.0, volume=0.2):
+    async def play_youtube_audio(self, ctx, voice_client, media_url=None, playback_speed=1.0, volume=0.2):
         """Plays YouTube audio and updates the player UI."""
         url_regex = re.compile(
             r'^(https?://)?(www\.)?(youtube\.com|youtu\.?be)/.+$')
-        search_query = video_url if video_url and url_regex.match(
-            video_url) else f'ytsearch1:{video_url}'
+        search_query = media_url if media_url and url_regex.match(
+            media_url) else f'ytsearch1:{media_url}'
 
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -135,7 +140,7 @@ class MusicPlayer:
                 media_url = info.get('url')
                 genre = "Unknown"
                 
-                if info.get('duration') > 7600:
+                if info.get('duration') > self.max_media_duration:
                     await ctx.send("Sorry, I can't play songs longer than 2 hours.", delete_after=12)
                     return
 
@@ -148,15 +153,15 @@ class MusicPlayer:
                 with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
                     cursor = conn.cursor()
 
-                    song_title = info['title']
+                    media_title = info['title']
 
                     cursor.execute('''
-                        INSERT INTO user_actions (
+                        INSERT INTO music_actions (
                             guild_id,
                             user_id,
                             user_name,
-                            song_title,
-                            song_url,
+                            media_title,
+                            media_url,
                             genre,
                             playback_speed,
                             duration,
@@ -166,7 +171,7 @@ class MusicPlayer:
                         ctx.guild.id,
                         ctx.author.id,
                         ctx.author.display_name,
-                        song_title,
+                        media_title,
                         info['webpage_url'],
                         genre,
                         playback_speed,
@@ -177,12 +182,13 @@ class MusicPlayer:
 
                     thumbnail_url = info['thumbnail']
                     self.current_video_info = info
-                    self.current_song_url = self.current_video_info['webpage_url']
+                    self.current_media_url = self.current_video_info['webpage_url']
+                    
                     await self.create_player_embed(ctx, info['webpage_url'], info['title'], playback_speed, thumbnail_url)
 
                     ffmpeg_options = self._get_ffmpeg_options(playback_speed)
                     source = discord.FFmpegPCMAudio(
-                        media_url, executable=self.bot.ffmpeg_path, **ffmpeg_options)
+                        media_url, executable=self.ffmpeg_path, **ffmpeg_options)
 
                     await asyncio.sleep(2)  # preload delay
 
@@ -210,7 +216,7 @@ class MusicPlayer:
                     pass
                 log_error(self.bot, f"Error in after play callback: {str(e)}")
 
-    async def stop_playing(self, ctx):
+    async def stop_playing(self):
         """Stops the music player and clears the state."""
         await self.delete_player_embed()
         self.is_playing = False
@@ -256,6 +262,6 @@ class MusicPlayer:
                 await self.create_player_embed(ctx, next_url, self.current_video_info['title'], playback_speed)
                 await self.play_youtube_audio(ctx, voice_client, next_url, playback_speed)
             else:
-                await self.stop_playing(ctx)
+                await self.stop_playing()
         else:
-            await self.stop_playing(ctx)
+            await self.stop_playing()

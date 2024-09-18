@@ -285,7 +285,7 @@ async def generate_bar_chart(ctx, data, title=None, xlabel=None, ylabel=None, gr
 
     try:
         if group == 'song':
-            labels = [row[0] for row in data]  # song_title
+            labels = [row[0] for row in data]  # media_title
             values = [row[2] for row in data]  # count
         elif group == 'hour':
             # Format hour as 'HH:00'
@@ -347,7 +347,7 @@ async def generate_pie_chart(ctx, data, title=None, group='song'):
 
     try:
         if group == 'song':
-            labels = [row[0] for row in data]  # song_title
+            labels = [row[0] for row in data]  # media_title
             values = [row[2] for row in data]  # count
         elif group == 'hour':
             # Format hour as 'HH:00'

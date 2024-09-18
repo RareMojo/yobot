@@ -44,8 +44,8 @@ class MusicStatsCog(commands.Cog):
                 params = [stat_type, ctx.guild.id]
 
                 if group == 'song':
-                    select_clause = "SELECT song_title, song_url, COUNT(*) as count"
-                    group_clause = "GROUP BY song_title, song_url"
+                    select_clause = "SELECT media_title, media_url, COUNT(*) as count"
+                    group_clause = "GROUP BY media_title, media_url"
                 elif group == 'hour':
                     select_clause = "SELECT strftime('%H', timestamp) as hour, COUNT(*) as count"
                     group_clause = "GROUP BY hour"
@@ -53,7 +53,7 @@ class MusicStatsCog(commands.Cog):
                     select_clause = "SELECT strftime('%w', timestamp) as day_of_week, COUNT(*) as count"
                     group_clause = "GROUP BY day_of_week"
 
-                query = f"{select_clause} FROM user_actions WHERE action = ? AND guild_id = ?"
+                query = f"{select_clause} FROM music_actions WHERE action = ? AND guild_id = ?"
 
                 if timeframe == "today":
                     query += " AND DATE(timestamp) = DATE('now')"
@@ -84,8 +84,8 @@ class MusicStatsCog(commands.Cog):
                         message = f"**Top {stat_type}s by {group} ({timeframe}):**\n"
                         for i, row in enumerate(data, start=1):
                             if group == 'song':
-                                song_title, song_url, count = row
-                                message += f"{i}. [{song_title}](<{song_url}>): {count} {stat_type}s\n"
+                                media_title, media_url, count = row
+                                message += f"{i}. [{media_title}](<{media_url}>): {count} {stat_type}s\n"
                             elif group == 'hour':
                                 hour, count = row
                                 message += f"{i}. Hour {hour}: {count} {stat_type}s\n"
@@ -104,7 +104,7 @@ class MusicStatsCog(commands.Cog):
         """
         Calculates the total listening time, both globally and per user.
         """
-        query = "SELECT SUM(playback_speed * duration) as total_time FROM user_actions WHERE action = 'request' AND guild_id = ?"
+        query = "SELECT SUM(playback_speed * duration) as total_time FROM music_actions WHERE action = 'request' AND guild_id = ?"
         params = [ctx.guild.id]
 
         if timeframe == "today":
