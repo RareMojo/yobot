@@ -26,8 +26,14 @@ class MusicPlayer:
 
     async def create_player_embed(self, ctx, url, title, playback_speed=1.0, thumbnail='https://i.imgur.com/tSuXN8P.png'):
         """Creates or updates the player embed."""
+        if playback_speed > 1.0:
+            player_title = f":notes: Fast Playing"
+        elif playback_speed < 1.0:
+            player_title = f":notes: Slow Playing"
+        else:
+            player_title = ":notes: Now Playing"
         embed = discord.Embed(
-            title=":notes: Now Playing",
+            title=player_title,
             description=f"[{title}]({url})",
             color=discord.Color.blurple()
         )
@@ -65,14 +71,19 @@ class MusicPlayer:
         duration = video_info['duration'] / playback_speed
         title, url = video_info['title'], video_info['webpage_url']
         start_time = time.time()
-
+        if playback_speed > 1.0:
+            player_title = f":notes: Fast Playing"
+        elif playback_speed < 1.0:
+            player_title = f":notes: Slow Playing"
+        else:
+            player_title = ":notes: Now Playing"
         while voice_client.is_playing():
             elapsed_time = time.time() - start_time
             progress_percentage = min(elapsed_time / duration, 1.0)
             progress_bar = generate_progress_bar(progress_percentage)
 
             embed = discord.Embed(
-                title=":notes: Now Playing",
+                title=player_title,
                 description=f"[{title}]({url})",
                 color=discord.Color.blurple()
             )
@@ -119,6 +130,8 @@ class MusicPlayer:
             r'^(https?://)?(www\.)?(youtube\.com|youtu\.?be)/.+$')
         search_query = media_url if media_url and url_regex.match(
             media_url) else f'ytsearch1:{media_url}'
+        
+        self.current_playback_speed = playback_speed
 
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -127,7 +140,7 @@ class MusicPlayer:
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'opus',
-                'preferredquality': '256',
+                'preferredquality': '198',
             }],
             'writethumbnail': True,
             'outtmpl': 'thumbnails/%(id)s.%(ext)s',

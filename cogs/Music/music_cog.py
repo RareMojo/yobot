@@ -15,7 +15,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
         self.bot = bot
         self.music_channel_ids = self.bot.config['music_channel_ids']
         self.thumbnail = 'https://i.imgur.com/tSuXN8P.png'
-        self.music_volume = self.bot.config['music_volume']
+        self.media_volume = self.bot.config['media_volume']
         self.player = MusicPlayer(bot, [], None, None)
         self._initialize_music_db()
         log_debug(bot, "MusicCog initialized.")
@@ -37,7 +37,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     user_name TEXT NOT NULL,
                     media_title TEXT NOT NULL,
                     media_url TEXT NOT NULL,
-                    genre TEXT NOT NULL,
+                    genre TEXT DEFAULT Unknown,
                     playback_speed REAL,
                     duration REAL,
                     action TEXT NOT NULL,
@@ -66,14 +66,14 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
             await ctx.send("The queue is full! Maximum queue size is 100 songs.", delete_after=12)
             return None
 
-        await ctx.send(f":notes: **Song Requested**\nAdded to the queue:\n{song}")
+        await ctx.send(f":satellite:  **Song Requested**\nAdded to the queue:\n{song}")
 
         if self.player.is_playing:
             self.player.queue.append((song, 1.0))
         else:
             self.player.is_playing = True
             try:
-                await self.player.play_youtube_audio(ctx, voice_client, song, volume=self.music_volume / 100)
+                await self.player.play_youtube_audio(ctx, voice_client, song, volume=self.media_volume / 100)
                 if not voice_client.is_playing() and not self.player.queue:
                     self.bot.loop.create_task(self.idle_disconnect(ctx))
             except Exception as e:
@@ -134,13 +134,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded the most recent song to the queue:\n{media_title} requested by {user_name} (at speed {playback_speed}x)")
+                await ctx.send(f":satellite:  **Song Requested**\nAdded the most recent song to the queue:\n{media_title} requested by {user_name} (at speed {playback_speed}x)")
 
                 if self.player.is_playing:
                     self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.media_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(self.idle_disconnect(ctx))
         except sqlite3.Error as e:
@@ -152,12 +152,12 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
     @commands.hybrid_command(name="slowplay", help="Plays a song at 0.75x speed.")
     async def slowplay(self, ctx, song: str):
         """Adds a song to the queue and plays at slow 0.75x speed."""
-        await self._play_with_speed(ctx, song, 0.75, "slowplay", self.music_volume)
+        await self._play_with_speed(ctx, song, 0.75, "slowplay", self.media_volume)
 
     @commands.hybrid_command(name="fastplay", help="Plays a song at 1.25x speed.")
     async def fastplay(self, ctx, song: str):
         """Adds a song to the queue and plays at fast 1.25x speed."""
-        await self._play_with_speed(ctx, song, 1.25, "fastplay", self.music_volume)
+        await self._play_with_speed(ctx, song, 1.25, "fastplay", self.media_volume)
 
     async def _play_with_speed(self, ctx, song: str, speed: float, label: str, volume: int):
         """Helper to play songs with different speeds."""
@@ -170,13 +170,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 await ctx.send("The queue is full! Maximum queue size is 100 songs.", delete_after=12)
                 return
 
-            await ctx.send(f":notes: **Song Requested**\nAdded song at {label} speed to the queue:\n{song}")
+            await ctx.send(f":satellite:  **Song Requested**\nAdded song at {label} speed to the queue:\n{song}")
 
             if self.player.is_playing:
                 self.player.queue.append((song, speed))
             else:
                 self.player.is_playing = True
-                await self.player.play_youtube_audio(ctx, voice_client, song, playback_speed=speed, volume=self.music_volume / 100)
+                await self.player.play_youtube_audio(ctx, voice_client, song, playback_speed=speed, volume=self.media_volume / 100)
                 # start the idle disconnect task
                 if not voice_client.is_playing() and not self.player.queue:
                     self.bot.loop.create_task(self.idle_disconnect(ctx))
@@ -221,35 +221,54 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
         elif ctx.message.channel.id not in self.music_channel_ids:
             await ctx.send("You need to type in the music chat to use this command!", delete_after=12)
             return
-
-        voice_client = discord.utils.get(
-            self.bot.voice_clients, guild=ctx.guild)
+        
+        voice_client = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
         if voice_client and voice_client.is_playing():
-            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
-                conn.execute('PRAGMA foreign_keys = ON;')
-                cursor = conn.cursor()
-
-                try:
+            try:
+                with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
+                    conn.execute('PRAGMA foreign_keys = ON;')
+                    cursor = conn.cursor()
                     media_url = self.player.current_media_url
+                    genre = "Unknown"
+                    if self.player.current_video_info.get('genre'):
+                        genre = genre[0]
 
-                    # Track the skip here
-                    cursor.execute(
-                        'INSERT INTO music_actions (guild_id, user_id, user_name, media_title, media_url, action) VALUES (?, ?, ?, ?, ?, ?)',
-                        (ctx.guild.id, ctx.author.id, ctx.author.display_name,
-                         self.player.current_video_info['title'], media_url, 'skip')
-                    )
+                    cursor.execute('''
+                        INSERT INTO music_actions (
+                            guild_id,
+                            user_id,
+                            user_name,
+                            media_title,
+                            media_url,
+                            genre,
+                            playback_speed,
+                            duration,
+                            action
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'skip')
+                    ''', (
+                        ctx.guild.id,
+                        ctx.author.id,
+                        ctx.author.display_name,
+                        self.player.current_video_info['title'],
+                        media_url,
+                        genre,
+                        self.player.current_playback_speed,
+                        self.player.current_video_info['duration']
+                    ))
+
                     conn.commit()
+                    
+            except sqlite3.Error as e:
+                conn.rollback()
+                await ctx.send(f"Error while recording skip.")
+                log_error(self.bot, f"Error recording skip: {str(e)}")
+            except Exception as e:
+                await ctx.send(f"Error skipping song.\n\nReport this to your server admin if you think this is a bug.")
+                log_error(self.bot, f"Error skipping song: {str(e)}")
 
-                    await ctx.send("Song skipped.", delete_after=12)
+            voice_client.stop()
+            await ctx.send("Skipping song.", delete_after=12)
 
-                except sqlite3.Error as e:
-                    conn.rollback()
-                    await ctx.send(f"Error while recording skip.")
-                    log_error(self.bot, f"Error recording skip: {str(e)}")
-
-                voice_client.stop()
-                if not voice_client.is_playing() and not self.player.queue:
-                    self.bot.loop.create_task(self.idle_disconnect(ctx))
         else:
             await ctx.send("No audio is playing.", delete_after=12)
 
@@ -306,7 +325,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
 
             if volume is None:
                 embed = create_embed(
-                    "Current Volume", f"The current volume is: {self.music_volume}\nUse /volume <0-100> to set the volume.", discord.Color.blue(), self.thumbnail)
+                    "Current Volume", f"The current volume is: {self.media_volume}\nUse /volume <0-100> to set the volume.", discord.Color.blue(), self.thumbnail)
                 await ctx.send(embed=embed)
             elif volume < 0 or volume > 100:
                 embed = create_embed(
@@ -319,7 +338,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
 
             if voice_client and voice_client.is_playing():
                 voice_client.source.volume = volume / 100
-                self.music_volume = volume
+                self.media_volume = volume
                 update_config(self.bot.config_file, {"music_volume": volume})
                 embed = create_embed(
                     "Volume Set", f"Volume set to {volume}", discord.Color.green(), self.thumbnail)
@@ -368,76 +387,109 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
         elif reaction.emoji == '⏮️':
             voice_client = discord.utils.get(
                 self.bot.voice_clients, guild=message.guild)
-
-            current_time = time.time()
-            cooldowns = {}
-            if message.guild.id in self.cooldowns and current_time - self.cooldowns[message.guild.id] < 30:
-                remaining_time = 30 - \
-                    (current_time - self.cooldowns[message.guild.id])
-                await message.channel.send(f"Cooldown active. Please wait {int(remaining_time)} seconds.", delete_after=12)
+            if user.voice is None:
+                await message.channel.send("You need to be in a voice channel to use this command!", delete_after=12)
                 return
-
             try:
-                if voice_client and voice_client.is_playing():
-                    voice_client.stop()
-                    if self.player.queue:
-                        song, speed = self.player.queue.pop(0)
-                        await self.player.play_youtube_audio(message, voice_client, song, volume=self.music_volume / 100, playback_speed=speed)
-                        await message.channel.send(f":notes: **Song Requested**\nPlaying previous song:\n{song} requested by reaction buttons.")
-
-                        self.cooldowns[message.guild.id] = current_time
-
-                    else:
-                        await self.player.stop_playing()
-                        await message.channel.send("No more songs in the queue.", delete_after=12)
+                if self.player.current_media_url:
+                    self.player.queue.insert(0, (self.player.current_media_url, self.player.current_playback_speed))
+                    await message.channel.send("Previous song will be played again.", delete_after=12)
                 else:
-                    await message.channel.send("No audio is playing.", delete_after=12)
+                    await message.channel.send("No previous song to play.", delete_after=12)
             except Exception as e:
                 await message.channel.send(f"Error playing previous song.\n\nReport this to your server admin if you think this is a bug.")
                 log_error(self.bot, f"Error playing previous song: {str(e)}")
 
         elif reaction.emoji == '⏭️':
-            voice_client = discord.utils.get(
-                self.bot.voice_clients, guild=message.guild)
-            if voice_client and voice_client.is_playing():
+            voice_client = discord.utils.get(self.bot.voice_clients, guild=message.guild)
+        
+            if user.voice is None:
+                await message.channel.send("You need to be in a voice channel to use this command!", delete_after=12)
+                return
+            try:
                 with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
                     conn.execute('PRAGMA foreign_keys = ON;')
                     cursor = conn.cursor()
-
-                    try:
-                        media_url = self.player.current_media_url
-
-                        # Track the skip here
-                        cursor.execute(
-                            'INSERT INTO music_actions (guild_id, user_id, user_name, media_title, media_url, action) VALUES (?, ?, ?, ?, ?, ?)',
-                            message.guild.id, user.id, user.display_name,
-                            self.player.current_video_info['title'], media_url, 'skip')
-
-                        conn.commit()
-
-                    except sqlite3.Error as e:
-                        conn.rollback()
-                        await message.channel.send(f"Error while recording skip.")
-                        log_error(self.bot, f"Error recording skip: {str(e)}")
-                    voice_client.stop()
-
-        elif reaction.emoji == '❤️':
-            with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
-                conn.execute('PRAGMA foreign_keys = ON;')
-                cursor = conn.cursor()
-                try:
                     media_url = self.player.current_media_url
-                    cursor.execute(
-                        'INSERT INTO music_actions (guild_id, user_id, user_name, media_title, media_url, action) VALUES (?, ?, ?, ?, ?, ?)',
-                        message.guild.id, user.id, user.display_name,
-                        self.player.current_video_info['title'], media_url, 'like')
+                    genre = "Unknown"
+                    if self.player.current_video_info.get('genre'):
+                        genre = genre[0]
+
+                    cursor.execute('''
+                        INSERT INTO music_actions (
+                            guild_id,
+                            user_id,
+                            user_name,
+                            media_title,
+                            media_url,
+                            genre,
+                            playback_speed,
+                            duration,
+                            action
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'skip')
+                    ''', (
+                        message.guild.id,
+                        user.id,
+                        user.display_name,
+                        self.player.current_video_info['title'],
+                        media_url,
+                        genre,
+                        self.player.current_playback_speed,
+                        self.player.current_video_info['duration']
+                    ))
 
                     conn.commit()
-                    await message.channel.send(f"❤️ **{user.name}** liked the song.", delete_after=8)
-                except sqlite3.Error as e:
-                    conn.rollback()
-                    await message.channel.send(f"Error while recording like:\n `{str(e)}`")
-                    log_error(self.bot, f"Error recording like: {str(e)}")
+                    
+            except sqlite3.Error as e:
+                conn.rollback()
+                await message.channel.send(f"Error while recording skip.")
+                log_error(self.bot, f"Error recording skip: {str(e)}")
+            except Exception as e:
+                await message.channel.send(f"Error skipping song.\n\nReport this to your server admin if you think this is a bug.")
+                log_error(self.bot, f"Error skipping song: {str(e)}")
+
+            voice_client.stop()
+            await ctx.send("Skipping song.", delete_after=12)
+
+        elif reaction.emoji == '❤️':
+            try:
+                with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
+                    conn.execute('PRAGMA foreign_keys = ON;')
+                    cursor = conn.cursor()
+                    media_url = self.player.current_media_url
+                    genre = "Unknown"
+                    if self.player.current_video_info.get('genre'):
+                        genre = genre[0]
+
+                    cursor.execute('''
+                        INSERT INTO music_actions (
+                            guild_id,
+                            user_id,
+                            user_name,
+                            media_title,
+                            media_url,
+                            genre,
+                            playback_speed,
+                            duration,
+                            action
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'like')
+                    ''', (
+                        message.guild.id,
+                        user.id,
+                        user.display_name,
+                        self.player.current_video_info['title'],
+                        media_url,
+                        genre,
+                        self.player.current_playback_speed,
+                        self.player.current_video_info['duration']
+                    ))
+
+                    conn.commit()
+                    await message.channel.send(f"❤️ **{user.name}** liked the song.", delete_after=12)
+            except sqlite3.Error as e:
+                conn.rollback()
+                await message.channel.send(f"Error while recording like:\n `{str(e)}`")
+                log_error(self.bot, f"Error recording like: {str(e)}")
 
     async def _play_recent_song(self, ctx, user: discord.User = None):
         """Handles playing the most recent song requested by the user or another user."""
@@ -471,13 +523,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded {user.mention}'s most recent song to the queue:\n{media_title} (at speed {playback_speed}x)")
+                await ctx.send(f":satellite:  **Song Requested**\nAdded {user.mention}'s most recent song to the queue:\n{media_title} (at speed {playback_speed}x)")
 
                 if self.player.is_playing:
                     self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.media_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
@@ -513,13 +565,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded the most requested song to the queue:\n{media_title}")
+                await ctx.send(f":satellite:  **Song Requested**\nAdded the most requested song to the queue:\n{media_title}")
 
                 if self.player.is_playing:
                     self.player.queue.append((media_url, 1.0))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.media_volume / 100)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
@@ -555,13 +607,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded the most liked song to the queue:\n{media_title}")
+                await ctx.send(f":satellite:  **Song Requested**\nAdded the most liked song to the queue:\n{media_title}")
 
                 if self.player.is_playing:
                     self.player.queue.append((media_url, 1.0))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.media_volume / 100)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
@@ -603,13 +655,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded {user.mention}'s favorite song to the queue:\n{media_title} (Requested {request_count} times at speed {playback_speed}x)")
+                await ctx.send(f":satellite:  **Song Requested**\nAdded {user.mention}'s favorite song to the queue:\n{media_title} (Requested {request_count} times at speed {playback_speed}x)")
 
                 if self.player.is_playing:
                     self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.media_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
@@ -644,13 +696,13 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                 if voice_client is None:
                     return
 
-                await ctx.send(f":notes: **Song Requested**\nAdded song with the most speed changes to queue:\n{media_title} at speed {playback_speed}x")
+                await ctx.send(f":satellite:  **Song Requested**\nAdded song with the most speed changes to queue:\n{media_title} at speed {playback_speed}x")
 
                 if self.player.is_playing:
                     self.player.queue.append((media_url, playback_speed))
                 else:
                     self.player.is_playing = True
-                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.music_volume / 100, playback_speed=playback_speed)
+                    await self.player.play_youtube_audio(ctx, voice_client, media_url, volume=self.media_volume / 100, playback_speed=playback_speed)
                     if not voice_client.is_playing() and not self.player.queue:
                         self.bot.loop.create_task(
                             self.idle_disconnect(ctx))
