@@ -75,9 +75,10 @@ def get_new_config():
           "prefix": "",
           "bot_name": "",
           "presence": "",
-          "music_volume": 25,
+          "inactivity_duration": 300,
+          "max_media_duration": 3600,
+          "media_volume": 10,
           "music_channel_ids": ["", ""],
-          "ffmpeg": "",
           "log_level": "INFO",
           "update_bot": True,
       }
@@ -88,9 +89,10 @@ def get_new_config():
         "prefix": "/",
         "bot_name": input("Bot Name: "),
         "presence": input("Presence: "),
-        "music_volume": 25,
+        "inactivity_duration": 300,
+        "max_media_duration": 3600,
+        "media_volume": 10,
         "music_channel_ids": [int(input("Music Channel ID: ")), 12345678],
-        "ffmpeg": "",
         "log_level": "INFO",
         "update_bot": True,
     }
@@ -203,7 +205,8 @@ def get_boolean_input(bot: commands.Bot, prompt: str) -> bool:
                 bot.log.warning("Invalid input. Try again.")
 
         except Exception as e:
-            bot.log.error(f"Error occurred while getting boolean input: {str(e)}")
+            bot.log.error(
+                f"Error occurred while getting boolean input: {str(e)}")
             bot.log.debug(f"Error details: {traceback.format_exc()}")
             bot.log.warning("Invalid input. Try again.")
 
@@ -225,7 +228,7 @@ def make_filepaths(paths: dict):
             path.parent.mkdir(parents=True, exist_ok=True)
         else:
             path.mkdir(parents=True, exist_ok=True)
-            
+
 
 def create_embed(title: str, description: str, color: discord.Color, thumbnail: str = None):
     """
@@ -250,18 +253,34 @@ def create_embed(title: str, description: str, color: discord.Color, thumbnail: 
 
 def format_time(seconds):
     """
-    Formats seconds into minutes and seconds.
+    Formats seconds into hours, minutes, and seconds.
+    Ensures that all time components are integers to avoid formatting errors.
+
     Args:
-      seconds (int): The number of seconds.
+        seconds (int or float): The number of seconds.
+
     Returns:
-        str: The formatted time string.
+        str: The formatted time string in 'H:MM:SS' or 'MM:SS' format.
+
     Examples:
         >>> format_time(65)
         '1:05'
+        >>> format_time(3665)
+        '1:01:05'
+        >>> format_time(7322)
+        '2:02:02'
+        >>> format_time(0)
+        '0:00'
     """
-    minutes = int(seconds // 60)
-    seconds = int(seconds % 60)
-    return f"{minutes}:{seconds:02d}"
+    total_seconds = int(seconds)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    else:
+        return f"{minutes}:{secs:02d}"
 
 
 async def generate_bar_chart(ctx, data, title=None, xlabel=None, ylabel=None, group='song'):
@@ -350,13 +369,11 @@ async def generate_pie_chart(ctx, data, title=None, group='song'):
             labels = [row[0] for row in data]  # media_title
             values = [row[2] for row in data]  # count
         elif group == 'hour':
-            # Format hour as 'HH:00'
             labels = [f"{int(row[0]):02d}:00" for row in data]
             values = [row[1] for row in data]  # count
         elif group == 'day':
             day_mapping = ['Sunday', 'Monday', 'Tuesday',
                            'Wednesday', 'Thursday', 'Friday', 'Saturday']
-            # Convert day number to name
             labels = [day_mapping[int(row[0])] for row in data]
             values = [row[1] for row in data]  # count
         else:
@@ -399,6 +416,7 @@ def generate_progress_bar(progress_percentage):
     filled_bars = int(progress_percentage * total_bars)
     return "▰" * filled_bars + "▱" * (total_bars - filled_bars)
 
+
 async def join_voice_channel(bot: commands.Bot, ctx, allowed_text_channels: list):
     """
     Joins the voice channel of the user.
@@ -410,7 +428,7 @@ async def join_voice_channel(bot: commands.Bot, ctx, allowed_text_channels: list
         VoiceClient: The voice client.
     Examples:
         >>> await join_voice_channel(bot, ctx, allowed_text_channels)
-    """    
+    """
     if ctx.author.voice is None:
         await ctx.send("You need to be in a voice channel to use this command!", delete_after=12)
         return None

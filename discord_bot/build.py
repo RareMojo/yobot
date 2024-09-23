@@ -141,4 +141,6 @@ class BuildBot(Bot):
         intents = Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.reactions = True
+        intents.guilds = True
         return Bot(intents=intents, paths=self.paths, logger=self.log)

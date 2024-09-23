@@ -1,6 +1,7 @@
 import discord
 import sqlite3
-from discord.ext import commands
+import asyncio
+from discord.ext import commands, tasks
 from discord import Forbidden, HTTPException
 from utils.tools import update_with_discord, welcome_to_bot, generate_bar_chart, generate_pie_chart
 from utils.logger import log_debug, log_error, log_info
@@ -42,7 +43,7 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(f"This command is on cooldown. Try again in {round(error.retry_after, 2)} seconds.")
         else:
-            raise error # re-raise the error so it can be logged
+            raise error  # re-raise the error so it can be logged
 
     @commands.Cog.listener()
     async def on_connect(self):
@@ -56,7 +57,7 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
     async def on_ready(self):
         try:
             await welcome_to_bot(self.bot)
-            await self.bot.start_terminal_command_loop()
+            asyncio.create_task(self.bot.start_terminal_command_loop())
         except Exception as e:
             log_error(self.bot, f"Error welcoming Bot: {str(e)}")
 
@@ -290,6 +291,11 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
                 message += f"- {day_name}: {count} uses\n"
 
         await ctx.send(message)
+
+    @commands.hybrid_command(name="chickensandwich", help="Displays the chicken sandwich.")
+    async def chicken_sandwich(self, ctx: commands.Context):
+        image_url = "https://www.burgerking.com.my/upload/image/Product/2/Long%20Chicken.png"
+        await ctx.send(image_url)
 
 
 async def setup(bot: commands.Bot):
