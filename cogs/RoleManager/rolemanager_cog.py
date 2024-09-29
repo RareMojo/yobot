@@ -44,8 +44,6 @@ class RoleManager(commands.Cog):
                 log_debug(f"Channel with ID {channel_id} not found.")
                 continue
 
-            await channel.purge(limit=10)
-
             await self.send_weapon_embed(channel)
             await self.send_role_embed(channel)
             await self.send_style_embed(channel)
