@@ -36,6 +36,7 @@ class Bot(commands.Bot):
         self.log = logger
         self.log.debug("Bot built.")
         self.paths = paths
+        self.configs_dir = self.paths["configs"]
         self.config_file = self.paths["configs"] / "config.json"
         self.avatar_file = self.paths["assets"] / "images" / "avatar.png"
         self.cogs_dir = self.paths["cogs"]
