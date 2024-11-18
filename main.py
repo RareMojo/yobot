@@ -3,7 +3,6 @@ from pathlib import Path
 from discord_bot.build import BuildBot
 from utils.tools import make_filepaths
 
-
 #                     __                 __
 #                    /\ \               /\ \__
 #  __  __      ___   \ \ \____    ___   \ \ ,_\
@@ -14,33 +13,24 @@ from utils.tools import make_filepaths
 #      /\___/
 #      \/__/
 #
-# yobot: A Cog driven Discord bot written in Python.
+# yobot: A Cog-driven Discord bot written in Python.
 # Thanks and have fun yall! -RareMojo
 
 
-def launch_bot():
+async def main():
     """
-    Ensures that the bot's files are set up, then builds and starts the bot.
-
-    Launch this file to start the bot. Run: `python main.py` in the command line.
+    Main entry point for the bot. Sets up paths, builds the bot, and starts it.
     """
     src_dir = Path(__file__).parent.absolute()
-    bot_dir = Path(src_dir / "discord_bot")
-    configs_dir = Path(src_dir / "configs")
-    data_dir = Path(src_dir / "data")
-    assets = Path(src_dir / "assets")
-    logs_dir = Path(data_dir / "logs")
-    cogs_dir = Path(src_dir / "cogs")
-
     paths = {
         "root": src_dir,
-        "bot": bot_dir,
-        "configs": configs_dir,
+        "bot": src_dir / "discord_bot",
+        "configs": src_dir / "configs",
         "src": src_dir,
-        "data": data_dir,
-        "assets": assets,
-        "logs": logs_dir,
-        "cogs": cogs_dir,
+        "data": src_dir / "data",
+        "assets": src_dir / "assets",
+        "logs": src_dir / "data" / "logs",
+        "cogs": src_dir / "cogs",
     }
 
     make_filepaths(paths)
@@ -49,11 +39,17 @@ def launch_bot():
     bot = builder.build_bot()
 
     if bot:
-        asyncio.run(bot.start_bot())
+        try:
+            await bot.start_bot()
+        except KeyboardInterrupt:
+            bot.log.info("KeyboardInterrupt detected. Shutting down the bot...")
+            await bot.shutdown_cleanup()
+        except Exception as e:
+            bot.log.error(f"Unexpected error: {str(e)}")
     else:
         print("Bot failed to build or start.")
         input("Press ENTER to EXIT.")
 
 
 if __name__ == "__main__":
-    launch_bot()
+    asyncio.run(main())

@@ -18,7 +18,7 @@ class QuotesCog(commands.Cog, name="QuotesCog", description="A cog for managing 
             with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
                 cursor = conn.cursor()
 
-                # Enable foreign key support
+                # idk some foreign key support
                 cursor.execute('PRAGMA foreign_keys = ON;')
 
                 cursor.execute('''
@@ -70,44 +70,25 @@ class QuotesCog(commands.Cog, name="QuotesCog", description="A cog for managing 
             await ctx.send("An unexpected error occurred. Please contact the server administrator.")
             log_error(self.bot, f"Error getting quote: {e}")
 
-    @commands.hybrid_command(name="getquote", help="Get a quote from the database by id or title or author.")
-    async def get_quote(self, ctx: commands.Context, quote_id: int = None, quote_title: str = None, author: str = None):
-        """Fetch a quote from the database by id or title or author."""
+    @commands.hybrid_command(name="getquote", help="Get a quote from the database by title.")
+    async def get_quote(self, ctx: commands.Context, quote_title: str):
+        """Fetch a quote from the database by title."""
         try:
-            provided_args = [arg for arg in [quote_id, quote_title, author] if arg is not None]
-            if len(provided_args) != 1:
-                await ctx.send("Please provide exactly one of quote id, title, or author.", delete_after=12)
-                return
-
             with sqlite3.connect(self.bot.data_dir / 'server_stats.db') as conn:
                 cursor = conn.cursor()
-
-                if quote_id:
-                    cursor.execute(
-                        'SELECT * FROM quotes WHERE id = ? AND guild_id = ?',
-                        (quote_id, ctx.guild.id)
-                    )
-                elif quote_title:
-                    cursor.execute(
-                        'SELECT * FROM quotes WHERE quote_title = ? AND guild_id = ?',
-                        (quote_title, ctx.guild.id)
-                    )
-                elif author:
-                    cursor.execute(
-                        'SELECT * FROM quotes WHERE author = ? AND guild_id = ?',
-                        (author, ctx.guild.id)
-                    )
-                else:
-                    await ctx.send("Please provide a quote id or title or author.")
-                    return
-
+                cursor.execute(
+                    'SELECT * FROM quotes WHERE quote_title = ? AND guild_id = ?',
+                    (quote_title, ctx.guild.id)
+                )
                 quote = cursor.fetchone()
 
                 if not quote:
                     await ctx.send("No quote found.")
                     return
 
+                # Assuming quote[5] is the quote text and quote[6] is the author
                 await ctx.send(f"{quote[5]} -{quote[6]}")  # quote, -author
+
         except sqlite3.Error as e:
             await ctx.send("An error occurred while fetching a quote. Please try again later.")
             log_error(self.bot, f"Error getting quote: {e}")

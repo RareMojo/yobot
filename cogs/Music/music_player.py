@@ -49,7 +49,7 @@ class MusicPlayer:
             embed.set_thumbnail(url="https://i.imgur.com/tSuXN8P.png")
 
         if len(self.queue) > 0:
-            next_url, _ = self.queue[0]
+            next_url, _, _, _ = self.queue[0]  # There was an issue here for unpacking values, must have not updated the code properly
             next_song_field = f"[Next Song]({next_url})"
             embed.add_field(
                 name="Up Next", value=next_song_field, inline=False)

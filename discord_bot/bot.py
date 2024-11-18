@@ -43,6 +43,11 @@ class Bot(commands.Bot):
         self.data_dir = self.paths["data"]
         self.text_logo = self.paths["assets"] / "texts" / "logo.txt"
         self.discord_token = str(DISCORD_TOKEN)
+        self.guild_bosses = {
+            "Dragon Lord": {"description": "A mighty dragon", "emoji": "🐉"},
+            "Giant Troll": {"description": "A massive troll", "emoji": "👹"},
+        }
+
 
         with open(self.config_file, "r") as f:
             self.config = json.load(f)
@@ -73,7 +78,6 @@ class Bot(commands.Bot):
 
     async def start_terminal_command_loop(self):
         """Starts the terminal command loop."""
-        self.log.debug("Starting terminal command loop...")
 
         terminal_task = asyncio.create_task(
             terminal_command_loop(self), name="terminal")
@@ -88,10 +92,11 @@ class Bot(commands.Bot):
         finally:
             terminal_task.cancel()
 
-    def stop_bot(self):
+    async def stop_bot(self):
         """Stops bot."""
         self.log.info("Bot stopping...")
         self.running = False
+        await self.close()
 
     async def load_cogs(self):
         """Loads all cogs in the cogs directory and its subdirectories."""

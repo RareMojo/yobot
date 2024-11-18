@@ -138,7 +138,7 @@ class BuildBot(Bot):
         self.__setup_cogs__(self.cogs_dir)
 
         self.log.debug("Building bot...")
-        intents = Intents.default()
+        intents = Intents.all()
         intents.message_content = True
         intents.members = True
         intents.reactions = True

@@ -112,16 +112,16 @@ class CoreCog(commands.Cog, name="CoreCog", description="The core cog for the bo
 
             for chunk in chunks:
                 await ctx.author.send(f"```{chunk}```")
-            await ctx.send("I’ve sent you a DM with the available commands!", delete_after=8)
+            await ctx.send("I’ve sent you a DM with the available commands!", ephemeral=True, delete_after=8)
         except discord.Forbidden:
-            await ctx.send("I couldn’t send you a DM. Please check your DM settings or contact an Admin.", delete_after=8)
+            await ctx.send("I couldn’t send you a DM. Please check your DM settings or contact an Admin.", ephemeral=True, delete_after=8)
             log_debug(self.bot, "User or server has DMs disabled.")
 
     @commands.hybrid_command(name="prune", description="Delete a specified number of the bot's messages, except for certain command responses.")
     @commands.has_guild_permissions(manage_messages=True)
     async def prune(self, ctx: commands.Context, amount: int):
         """Deletes a specified number of the bot's own messages in the current channel, excluding certain command replies."""
-        await ctx.send("Deleting messages...", delete_after=5)
+        await ctx.send("Deleting messages...", ephemeral=True,  delete_after=5)
 
         if amount < 1:
             await ctx.send("You must specify a number greater than 0.")

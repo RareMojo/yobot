@@ -107,7 +107,7 @@ def wipe_config(bot: commands.Bot) -> None:
         bot.log.error(f"An error occurred while wiping the config file: {str(e)}")
 
 
-def exit_bot_terminal(bot: commands.Bot) -> None:
+async def exit_bot_terminal(bot: commands.Bot) -> None:
     """
     Shuts down the bot.
     Args:
@@ -119,7 +119,7 @@ def exit_bot_terminal(bot: commands.Bot) -> None:
     """
     try:
         bot.log.debug("Shutting down Bot...")
-        bot.stop_bot()
+        await bot.stop_bot()
     except Exception as e:
         bot.log.error(f"Error shutting down Bot: {str(e)}")
 

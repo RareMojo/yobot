@@ -36,7 +36,6 @@ async def welcome_to_bot(bot: commands.Bot) -> None:
     owner_name = bot.config.get("owner_name")
 
     try:
-        bot.log.debug("Starting welcome_to_bot function...")
         bot.log.info("Bot Instance Details:")
         bot.log.info(f"Display name: {bot_name}")
         bot.log.info(f"Presence: {presence}")
@@ -134,8 +133,6 @@ async def update_with_discord(bot: commands.Bot) -> None:
       >>> update_with_discord(bot)
     """
     successful = True
-    bot.log.debug("Starting update_with_discord function...")
-    bot.log.debug("Checking for updates to bot settings...")
     update = bot.config.get("update_bot")
     bot_name = bot.config.get("bot_name")
     presence = bot.config.get("presence")
@@ -176,7 +173,6 @@ async def update_with_discord(bot: commands.Bot) -> None:
     else:
         bot.log.info("Bot settings are up to date.")
         bot.log.info("Connected to Discord.")
-    bot.log.debug("Exiting update_bot function...")
 
 
 def get_boolean_input(bot: commands.Bot, prompt: str) -> bool:

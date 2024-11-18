@@ -459,7 +459,7 @@ class MusicCog(commands.Cog, name="MusicCog", description="Streams audio from th
                     ))
 
                     conn.commit()
-                    await message.channel.send(f"❤️ **{user.name}** liked the song.", delete_after=12)
+                    await message.channel.send(f"❤️ **{user.display_name}** liked the song.", delete_after=12)
             except sqlite3.Error as e:
                 conn.rollback()
                 await message.channel.send(f"Error while recording like:\n `{str(e)}`")

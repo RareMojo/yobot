@@ -76,7 +76,7 @@ class TerminalCommands:
 
         if user_command in ["exit", "quit", "shutdown"]:
             self.bot.log.debug("Exiting bot terminal...")
-            exit_bot_terminal(self.bot)
+            await exit_bot_terminal(self.bot)
 
         elif user_command in ["help", "h", "?"]:
             self.bot.log.debug("Showing help...")
